@@ -1,0 +1,8 @@
+.cache/*
+.vscode/*
+.idea/*
+build/*
+cmake-build-*/*
+python/.venv/*
+.venv/*
+out/
