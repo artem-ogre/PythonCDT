@@ -63,7 +63,6 @@ PYBIND11_MODULE(PythonCDT, m)
         .value("RESOLVE", CDT::IntersectingConstraintEdges::Resolve);
 
     py::class_<V2d>(m, "V2d", py::buffer_protocol())
-        .def(py::init<int, int>(), py::arg("x"), py::arg("y"))
         .def(py::init<coord_t, coord_t>(), py::arg("x"), py::arg("y"))
         .def(py::init([](py::buffer b) {
             // Request a buffer descriptor from Python
