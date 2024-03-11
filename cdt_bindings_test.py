@@ -46,18 +46,16 @@ def test_Edge() -> None:
 
 def test_Triangulation() -> None:
     """Test Triangulation class"""
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.IGNORE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     assert len(t.vertices) == 0, "Wrong vertex count in empty triangulation"
     assert len(t.triangles) == 0, "Wrong triangle count in empty triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in empty triangulation"
-    assert len(t.vertices_triangles) == 0, "Wrong vertices triangles count in empty triangulation"
 
     vv = [cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)]
     t.insert_vertices(vv)
     assert len(t.vertices) == 7, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
-    assert t.vertices_triangles, "Wrong vertices triangles count in triangulation"
 
     ee = [cdt.Edge(0, 2)]
     t.insert_edges(ee)
@@ -69,13 +67,11 @@ def test_Triangulation() -> None:
     assert len(t.vertices) == 4, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 2, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 1, "Wrong fixed edge count in triangulation"
-    assert t.vertices_triangles, "Wrong vertices triangles count in triangulation"
 
     # test retrieving triangulation data using iterators
     assert t.vertices_count() == len(t.vertices), "Wrong vertex count"
     assert t.triangles_count() == len(t.triangles), "Wrong triangle count"
     assert t.fixed_edges_count() == len(t.fixed_edges), "Wrong fixed edge count"
-    assert t.vertices_triangles_count() == len(t.vertices_triangles), "Wrong vertices' triangles count"
     assert t.overlap_count_count() == len(t.overlap_count), "Wrong number of overlap-count"
     assert t.piece_to_originals_count() == len(t.piece_to_originals), "Wrong piece-to-originals count"
     for i, v in enumerate(t.vertices_iter()):
@@ -84,15 +80,13 @@ def test_Triangulation() -> None:
         assert tri == t.triangles[i], "Wrong triangle from iterable"
     for fe in t.fixed_edges_iter():
         assert fe in t.fixed_edges, "Wrong fixed edges from iterable"
-    for i, vt in enumerate(t.vertices_triangles_iter()):
-        assert vt == t.vertices_triangles[i], "Wrong vertices' triangles from iterable"
     for key, val in t.overlap_count_iter():
         assert t.overlap_count[key] == val, "Wrong overlap-count from iterable"
     for key, val in t.piece_to_originals_iter():
         assert t.piece_to_originals[key] == val, "Wrong piece-to-originals from iterable"
 
     #  Test resolving fixed edge intersections
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.RESOLVE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     ee = [cdt.Edge(0, 2), cdt.Edge(1, 3)]
     t.insert_vertices(vv)
     t.insert_edges(ee)
@@ -103,7 +97,7 @@ def test_Triangulation() -> None:
 
 def test_verify_topology() -> None:
     """Test verifying CDT topology"""
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.RESOLVE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     t.insert_vertices([cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)])
     t.insert_edges([cdt.Edge(0, 2), cdt.Edge(1, 3)])
     assert cdt.verify_topology(t), "Verifying topology produced wrong result"
@@ -130,7 +124,7 @@ def read_input_file(input_file):
 
 def test_triangulate_input_file() -> None:
     vv, ee = read_input_file("CDT/visualizer/data/Constrained Sweden.txt")
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.RESOLVE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     t.insert_vertices(vv)
     t.insert_edges(ee)
     t.erase_outer_triangles_and_holes()
@@ -138,12 +132,12 @@ def test_triangulate_input_file() -> None:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
         with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == '609d662d6628942c7cc7558f9d5ee952', "Wrong OFF file contents"
+            assert hashlib.md5(f.read()).hexdigest() == '5fb163a9f27ec6bdd05b7d5f2b23416c', "Wrong OFF file contents"
 
 
 def test_conform_to_edges() -> None:
     vv, ee = read_input_file("CDT/visualizer/data/ditch.txt")
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.RESOLVE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     t.insert_vertices(vv)
     t.conform_to_edges(ee)
     t.erase_outer_triangles_and_holes()
@@ -158,12 +152,11 @@ def test_conform_to_edges() -> None:
                                 np.array([[-1, 0], [0, 0.5], [1, 0], [0, -0.5]], dtype=np.float64),
                                 np.array([-1, 0, 0, 0.5, 1, 0, 0, -0.5], dtype=np.float64)])
 def test_insert_vertices(vv) -> None:
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.IGNORE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(vv)
     assert len(t.vertices) == 7, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
-    assert t.vertices_triangles, "Wrong vertices triangles count in triangulation"
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
@@ -176,26 +169,24 @@ def test_insert_vertices(vv) -> None:
                                 np.array([0, 1, 2, 3, 3, 4, 5, 6], dtype=np.uint32)])
 def test_insert_conform_edges(ee) -> None:
     # insert edges
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.IGNORE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(np.array([[0, 0], [4, 0], [5, 1], [2, 1], [-1, 1], [0, 2], [4, 2]], dtype=float))
     t.insert_edges(ee)
     assert len(t.vertices) == 10, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 15, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 4, "Wrong fixed edge count in triangulation"
-    assert t.vertices_triangles, "Wrong vertices triangles count in triangulation"
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
         with open(off_file, 'rb') as f:
             assert hashlib.md5(f.read()).hexdigest() == '8424ba2c8f8ebabe1bea4141464a347b', "Wrong OFF file contents"
     # conform to edges
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.IGNORE, 0.0)
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(np.array([[0, 0], [4, 0], [5, 1], [2, 1], [-1, 1], [0, 2], [4, 2]], dtype=float))
     t.conform_to_edges(ee)
     assert len(t.vertices) == 12, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 19, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 6, "Wrong fixed edge count in triangulation"
-    assert t.vertices_triangles, "Wrong vertices triangles count in triangulation"
     save_triangulation_as_off(t, "/tmp/cdt.off")
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"

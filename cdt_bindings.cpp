@@ -18,8 +18,9 @@
 namespace py = pybind11;
 
 using coord_t = double;
+using NearPointLocator_t = CDT::LocatorKDTree<coord_t>;
 using V2d = CDT::V2d<coord_t>;
-using Triangulation = CDT::Triangulation<coord_t>;
+using Triangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 
 namespace
 {
@@ -54,13 +55,14 @@ PYBIND11_MODULE(PythonCDT, m)
     m.attr("NO_VERTEX") = py::int_(CDT::noVertex);
 
     py::enum_<CDT::VertexInsertionOrder::Enum>(m, "VertexInsertionOrder")
-        .value("RANDOMIZED", CDT::VertexInsertionOrder::Randomized)
+        .value("AUTO", CDT::VertexInsertionOrder::Auto)
         .value("AS_PROVIDED", CDT::VertexInsertionOrder::AsProvided);
 
     py::enum_<CDT::IntersectingConstraintEdges::Enum>(
         m, "IntersectingConstraintEdges")
-        .value("IGNORE", CDT::IntersectingConstraintEdges::Ignore)
-        .value("RESOLVE", CDT::IntersectingConstraintEdges::Resolve);
+        .value("NOT_ALLOWED", CDT::IntersectingConstraintEdges::NotAllowed)
+        .value("TRY_RESOLVE", CDT::IntersectingConstraintEdges::TryResolve)
+        .value("DONT_CHECK", CDT::IntersectingConstraintEdges::DontCheck);
 
     py::class_<V2d>(m, "V2d", py::buffer_protocol())
         .def(py::init<coord_t, coord_t>(), py::arg("x"), py::arg("y"))
@@ -211,17 +213,6 @@ PYBIND11_MODULE(PythonCDT, m)
                     t.fixedEdges.begin(), t.fixedEdges.end());
             },
             py::keep_alive<0, 1>())
-        // vertex triangles
-        .def_readonly("vertices_triangles", &Triangulation::vertTris)
-        .def(
-            "vertices_triangles_count",
-            [](const Triangulation& t) { return t.vertTris.size(); })
-        .def(
-            "vertices_triangles_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(t.vertTris.begin(), t.vertTris.end());
-            },
-            py::keep_alive<0, 1>())
         // overlaps
         .def_readonly("overlap_count", &Triangulation::overlapCount)
         .def(
@@ -367,10 +358,19 @@ PYBIND11_MODULE(PythonCDT, m)
         .def("erase_outer_triangles", &Triangulation::eraseOuterTriangles)
         .def(
             "erase_outer_triangles_and_holes",
-            &Triangulation::eraseOuterTrianglesAndHoles);
+            &Triangulation::eraseOuterTrianglesAndHoles)
+        .def("is_finalized", &Triangulation::isFinalized)
+        .def(
+            "calculate_triangle_depths",
+            &Triangulation::calculateTriangleDepths)
+        .def(
+            "remove_triangles",
+            static_cast<void (Triangulation::*)(const CDT::TriIndUSet&)>(
+                &Triangulation::removeTriangles),
+            py::arg("triangle_indices"));
 
     m.def(
         "verify_topology",
-        &CDT::verifyTopology<coord_t>,
+        &CDT::verifyTopology<coord_t, NearPointLocator_t>,
         py::arg("triangulation"));
 }
