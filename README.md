@@ -19,3 +19,6 @@ pytest ./cdt_bindings_test.py
 
 ## License
 [Mozilla Public License, v. 2.0](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
+
+## Contributors
+- [SioulisChris](https://github.com/SioulisChris): fixing the tests on Windows
