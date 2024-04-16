@@ -16,8 +16,8 @@ import PythonCDT as cdt
 
 def test_constants() -> None:
     """Test that constants have proper values"""
-    assert cdt.NO_NEIGHBOR == np.iinfo(np.uint32).max, "NO_NEIGHBOR constant has wrong value"
-    assert cdt.NO_VERTEX == np.iinfo(np.uint32).max, "NO_VERTEX constant has wrong value"
+    assert cdt.NO_NEIGHBOR == np.iinfo(np.uintc).max, "NO_NEIGHBOR constant has wrong value"
+    assert cdt.NO_VERTEX == np.iinfo(np.uintc).max, "NO_VERTEX constant has wrong value"
 
 
 def test_V2d() -> None:
@@ -38,7 +38,7 @@ def test_Edge() -> None:
     assert e.v1 == 1 and e.v2 == 2, "Constructed wrong edge"
     e = cdt.Edge(2, 1)
     assert e.v1 == 1 and e.v2 == 2, "Constructed wrong edge"
-    e = cdt.Edge(np.array([2, 1], dtype=np.uint32))
+    e = cdt.Edge(np.array([2, 1], dtype=np.uintc))
     assert e.v1 == 1 and e.v2 == 2, "Constructed wrong edge"
 
     assert cdt.Edge(1, 2).__repr__() == "Edge(1, 2)", "Wrong __repr__ output for Edge"
@@ -121,6 +121,15 @@ def read_input_file(input_file):
         edges = [cdt.Edge(*(int(s) for s in f.readline().split())) for _ in range(n_edges)]
         return verts, edges
 
+def md5_checksum(file_path):
+    with open(file_path, 'r') as f:
+        return hashlib.md5(f.read().encode('utf-8')).hexdigest()
+
+def triangulation_md5_checksum(t: cdt.Triangulation):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        off_file = f"{tmp_dir}/cdt.off"
+        save_triangulation_as_off(t, off_file)
+        return md5_checksum(off_file)
 
 def test_triangulate_input_file() -> None:
     vv, ee = read_input_file("CDT/visualizer/data/Constrained Sweden.txt")
@@ -131,8 +140,7 @@ def test_triangulate_input_file() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
-        with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == '5fb163a9f27ec6bdd05b7d5f2b23416c', "Wrong OFF file contents"
+        assert md5_checksum(off_file) == '5fb163a9f27ec6bdd05b7d5f2b23416c', "Wrong OFF file contents"
 
 
 def test_conform_to_edges() -> None:
@@ -141,11 +149,7 @@ def test_conform_to_edges() -> None:
     t.insert_vertices(vv)
     t.conform_to_edges(ee)
     t.erase_outer_triangles_and_holes()
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == 'df2503c614e2f98656038948b355b27e', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == 'df2503c614e2f98656038948b355b27e', "Wrong OFF file contents"
 
 
 @pytest.mark.parametrize("vv", [[cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)],
@@ -157,16 +161,12 @@ def test_insert_vertices(vv) -> None:
     assert len(t.vertices) == 7, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == 'c424c4f2691dc3b9aabd39dcf2e17c53', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == 'c424c4f2691dc3b9aabd39dcf2e17c53', "Wrong OFF file contents"
 
 
 @pytest.mark.parametrize("ee", [[cdt.Edge(0, 1), cdt.Edge(2, 3), cdt.Edge(3, 4), cdt.Edge(5, 6)],
-                                np.array([[0, 1], [2, 3], [3, 4], [5, 6]], dtype=np.uint32),
-                                np.array([0, 1, 2, 3, 3, 4, 5, 6], dtype=np.uint32)])
+                                np.array([[0, 1], [2, 3], [3, 4], [5, 6]], dtype=np.uintc),
+                                np.array([0, 1, 2, 3, 3, 4, 5, 6], dtype=np.uintc)])
 def test_insert_conform_edges(ee) -> None:
     # insert edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -175,11 +175,8 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 10, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 15, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 4, "Wrong fixed edge count in triangulation"
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == '8424ba2c8f8ebabe1bea4141464a347b', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == '8424ba2c8f8ebabe1bea4141464a347b', "Wrong OFF file contents"
+
     # conform to edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(np.array([[0, 0], [4, 0], [5, 1], [2, 1], [-1, 1], [0, 2], [4, 2]], dtype=float))
@@ -187,9 +184,4 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 12, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 19, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 6, "Wrong fixed edge count in triangulation"
-    save_triangulation_as_off(t, "/tmp/cdt.off")
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        with open(off_file, 'rb') as f:
-            assert hashlib.md5(f.read()).hexdigest() == '9cb9dbaca4943ff0e3aab6c1d31f5a35', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == '9cb9dbaca4943ff0e3aab6c1d31f5a35', "Wrong OFF file contents"
