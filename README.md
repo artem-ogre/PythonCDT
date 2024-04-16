@@ -2,8 +2,7 @@
 
 Python bindings for [CDT: C++ library for constrained Delaunay triangulation](https://github.com/artem-ogre/CDT) implemented with [pybind11](https://github.com/pybind/pybind11)
 
-Current status: **work-in-progress, under development.**
-
+***If PythonCDT helped you please consider adding a star on [GitHub](https://github.com/artem-ogre/PythonCDT). This means a lot to the authors*** 🤩
 ## Building
 
 ### Pre-conditions
