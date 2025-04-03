@@ -1,23 +1,31 @@
-cmake_minimum_required(VERSION 3.13.0)
+cmake_minimum_required(VERSION 3.18.0)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 project(
-    PythonCDT
-    VERSION 0.1.0
-    DESCRIPTION "Software surface data rasterizer library"
+    ${SKBUILD_PROJECT_NAME}
+    VERSION ${SKBUILD_PROJECT_VERSION}
     LANGUAGES CXX
 )
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-add_subdirectory(CDT/CDT CDT)
-add_subdirectory(pybind11)
-pybind11_add_module(PythonCDT cdt_bindings.cpp)
-target_include_directories(
-        PythonCDT PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+set(PYBIND11_NEWPYTHON ON)
+find_package(pybind11 CONFIG REQUIRED)
+
+include(FetchContent)
+FetchContent_Declare(
+  CDT
+  GIT_REPOSITORY https://github.com/artem-ogre/CDT.git
+  GIT_TAG 4b4181713c73cf0a49a5b88fb3df4acca7436235
+  SOURCE_SUBDIR CDT
 )
-target_link_libraries(PythonCDT PRIVATE CDT::CDT)
-# Use rasterizer as pre-compiled header for faster test-only re-compiles
-#target_precompile_headers(PythonCDT PRIVATE include/rasterizer.h)
+FetchContent_MakeAvailable(CDT)
+
+pybind11_add_module(${SKBUILD_PROJECT_NAME} MODULE cdt_bindings.cpp)
+target_link_libraries(${SKBUILD_PROJECT_NAME} PRIVATE pybind11::module)
+target_link_libraries(${SKBUILD_PROJECT_NAME} PRIVATE CDT::CDT)
+install(TARGETS ${SKBUILD_PROJECT_NAME} LIBRARY DESTINATION .)

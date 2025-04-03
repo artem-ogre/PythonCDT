@@ -1,25 +1,23 @@
+[project]
+name = "PythonCDT"
+version = "0.0.1"
+authors = [{name = "Leica Geosystems"}]
+description = "Constrained Delaunay Triangulation"
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python=">=3.10"
+
+[project.license]
+text = "MPL-2.0"
+
+[project.urls]
+Repository = "https://github.com/artem-ogre/PythonCDT"
+
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel",
-    "ninja",
-    "cmake>=3.12",
-]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+wheel.exclude = ["include/*", "cmake/*"]
 
 [tool.isort]
 profile = "black"
-
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
-xfail_strict = true
-filterwarnings = ["error"]
-testpaths = ["tests"]
-
-[tool.cibuildwheel]
-test-command = "pytest {project}/tests"
-test-extras = ["test"]
-test-skip = ["*universal2:arm64"]
-# Setuptools bug causes collision between pypy and cpython artifacts
-before-build = "rm -rf {project}/build"
