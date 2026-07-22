@@ -1,7 +1,11 @@
 .cache/*
+.pytest_cache/
+__pycache__/
 .vscode/*
 .idea/*
 build/*
+dist/*
+*.egg-info/
 cmake-build-*/*
 python/.venv/*
 .venv/*

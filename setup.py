@@ -41,12 +41,17 @@ class CMakeBuild(build_ext):
         # Can be set with Conda-Build, for example.
         cmake_generator = os.environ.get("CMAKE_GENERATOR", "")
 
-        # Set Python_EXECUTABLE instead if you use PYBIND11_FINDPYTHON
-        # EXAMPLE_VERSION_INFO shows you how to pass a value into the C++ code
-        # from Python.
+        # Both spellings are passed on purpose: pybind11 < 3 uses its own
+        # PYTHON_EXECUTABLE, while pybind11 >= 3 defaults to CMake's
+        # FindPython, which reads Python_EXECUTABLE. Passing only the former
+        # lets CMake pick an unrelated interpreter and build against the
+        # wrong Python headers.
+        # VERSION_INFO is passed into the C++ code and surfaces as
+        # PythonCDT.__version__.
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
+            f"-DPython_EXECUTABLE={sys.executable}",
             f"-DCMAKE_BUILD_TYPE={cfg}",  # not used on MSVC, but no harm
         ]
         build_args = []
@@ -56,9 +61,7 @@ class CMakeBuild(build_ext):
             cmake_args += [
                 item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
 
-        # In this example, we pass in the version to C++. You might not need to.
-        cmake_args += [
-            f"-DEXAMPLE_VERSION_INFO={self.distribution.get_version()}"]
+        cmake_args += [f"-DVERSION_INFO={self.distribution.get_version()}"]
 
         if self.compiler.compiler_type != "msvc":
             # Using Ninja-build since it a) is available as a wheel and b)
@@ -123,18 +126,46 @@ class CMakeBuild(build_ext):
         )
 
 
+# Explicit encoding: the README contains non-ASCII characters, which would
+# fail to decode under the default locale on Windows.
+with open(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"),
+    encoding="utf-8",
+) as f:
+    long_description = f.read()
+
 # The information here can also be placed in setup.cfg - better separation of
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="PythonCDT",
-    version="0.0.1",
-    author="Leica Geosystems",
-    author_email="",
-    description="Test",
-    long_description="",
+    version="1.4.5",
+    author="Artem Amirkhanov",
+    description=(
+        "Python bindings for CDT: constrained Delaunay triangulation"
+    ),
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/artem-ogre/PythonCDT",
+    project_urls={
+        "Source": "https://github.com/artem-ogre/PythonCDT",
+        "Issues": "https://github.com/artem-ogre/PythonCDT/issues",
+        "CDT": "https://github.com/artem-ogre/CDT",
+    },
+    license="MPL-2.0",
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Programming Language :: C++",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering :: Mathematics",
+        "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    ],
+    keywords="delaunay triangulation constrained cdt computational-geometry",
     ext_modules=[CMakeExtension("PythonCDT")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     extras_require={"test": ["pytest>=6.0"]},
-    python_requires=">=3.6",
+    # pybind11 3.x supports Python 3.8 and newer
+    python_requires=">=3.8",
 )
