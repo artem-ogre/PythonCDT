@@ -15,6 +15,9 @@
 #include <sstream>
 #include <utility>
 
+#define STRINGIFY(x) #x
+#define MACRO_STRINGIFY(x) STRINGIFY(x)
+
 namespace py = pybind11;
 
 using coord_t = double;

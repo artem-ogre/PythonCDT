@@ -20,6 +20,11 @@ def test_constants() -> None:
     assert cdt.NO_VERTEX == np.iinfo(np.uintc).max, "NO_VERTEX constant has wrong value"
 
 
+def test_version() -> None:
+    """Test that the version is passed in from the build system"""
+    assert cdt.__version__ != "dev", "Version was not passed in from the build system"
+
+
 def test_V2d() -> None:
     """Test 2D vector"""
     p = cdt.V2d(42, 42)
@@ -140,7 +145,7 @@ def test_triangulate_input_file() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
-        assert md5_checksum(off_file) == '5fb163a9f27ec6bdd05b7d5f2b23416c', "Wrong OFF file contents"
+        assert md5_checksum(off_file) == 'db59c00d9dad866781cd96779e5262b7', "Wrong OFF file contents"
 
 
 def test_conform_to_edges() -> None:
@@ -149,7 +154,7 @@ def test_conform_to_edges() -> None:
     t.insert_vertices(vv)
     t.conform_to_edges(ee)
     t.erase_outer_triangles_and_holes()
-    assert triangulation_md5_checksum(t) == 'df2503c614e2f98656038948b355b27e', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == 'b64cae39c91a55dd4e23a146eb7df0d3', "Wrong OFF file contents"
 
 
 @pytest.mark.parametrize("vv", [[cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)],
@@ -161,7 +166,7 @@ def test_insert_vertices(vv) -> None:
     assert len(t.vertices) == 7, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == 'c424c4f2691dc3b9aabd39dcf2e17c53', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == 'db9176f4429942862a7a73155fb55322', "Wrong OFF file contents"
 
 
 @pytest.mark.parametrize("ee", [[cdt.Edge(0, 1), cdt.Edge(2, 3), cdt.Edge(3, 4), cdt.Edge(5, 6)],
@@ -175,7 +180,7 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 10, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 15, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 4, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == '8424ba2c8f8ebabe1bea4141464a347b', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == '639c7a1492b2adb8f25464ec81ff6a00', "Wrong OFF file contents"
 
     # conform to edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -184,4 +189,4 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 12, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 19, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 6, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == '9cb9dbaca4943ff0e3aab6c1d31f5a35', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == '9c87b435e247c1658ec0f04af3340dc7', "Wrong OFF file contents"
