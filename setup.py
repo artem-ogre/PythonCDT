@@ -126,18 +126,46 @@ class CMakeBuild(build_ext):
         )
 
 
+# Explicit encoding: the README contains non-ASCII characters, which would
+# fail to decode under the default locale on Windows.
+with open(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"),
+    encoding="utf-8",
+) as f:
+    long_description = f.read()
+
 # The information here can also be placed in setup.cfg - better separation of
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="PythonCDT",
     version="1.4.5",
-    author="Leica Geosystems",
-    author_email="",
-    description="Test",
-    long_description="",
+    author="Artem Amirkhanov",
+    description=(
+        "Python bindings for CDT: constrained Delaunay triangulation"
+    ),
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/artem-ogre/PythonCDT",
+    project_urls={
+        "Source": "https://github.com/artem-ogre/PythonCDT",
+        "Issues": "https://github.com/artem-ogre/PythonCDT/issues",
+        "CDT": "https://github.com/artem-ogre/CDT",
+    },
+    license="MPL-2.0",
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Programming Language :: C++",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering :: Mathematics",
+        "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    ],
+    keywords="delaunay triangulation constrained cdt computational-geometry",
     ext_modules=[CMakeExtension("PythonCDT")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     extras_require={"test": ["pytest>=6.0"]},
-    python_requires=">=3.6",
+    # pybind11 3.x supports Python 3.8 and newer
+    python_requires=">=3.8",
 )
