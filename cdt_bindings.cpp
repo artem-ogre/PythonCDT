@@ -261,7 +261,8 @@ PYBIND11_MODULE(PythonCDT, m)
             "insert_vertices",
             static_cast<void (Triangulation::*)(const std::vector<V2d>&)>(
                 &Triangulation::insertVertices),
-            py::arg("vertices"))
+            py::arg("vertices"),
+            py::call_guard<py::gil_scoped_release>())
         .def(
             "insert_vertices",
             [](Triangulation& t, py::buffer b) {
@@ -289,7 +290,6 @@ PYBIND11_MODULE(PythonCDT, m)
                 const std::size_t n_vert = info.size / 2;
                 const XY* const ptr = static_cast<XY*>(info.ptr);
                 {
-                    // The buffer is pinned and nothing below touches Python.
                     py::gil_scoped_release release;
                     t.insertVertices(
                         ptr,
@@ -303,7 +303,8 @@ PYBIND11_MODULE(PythonCDT, m)
             "insert_edges",
             static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
                 &Triangulation::insertEdges),
-            py::arg("edges"))
+            py::arg("edges"),
+            py::call_guard<py::gil_scoped_release>())
         .def(
             "insert_edges",
             [](Triangulation& t, py::buffer b) {
@@ -332,7 +333,6 @@ PYBIND11_MODULE(PythonCDT, m)
                 const std::size_t n_vert = info.size / 2;
                 const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
                 {
-                    // The buffer is pinned and nothing below touches Python.
                     py::gil_scoped_release release;
                     t.insertEdges(
                         ptr,
@@ -346,7 +346,8 @@ PYBIND11_MODULE(PythonCDT, m)
             "conform_to_edges",
             static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
                 &Triangulation::conformToEdges),
-            py::arg("edges"))
+            py::arg("edges"),
+            py::call_guard<py::gil_scoped_release>())
         .def(
             "conform_to_edges",
             [](Triangulation& t, py::buffer b) {
@@ -375,7 +376,6 @@ PYBIND11_MODULE(PythonCDT, m)
                 const std::size_t n_vert = info.size / 2;
                 const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
                 {
-                    // The buffer is pinned and nothing below touches Python.
                     py::gil_scoped_release release;
                     t.conformToEdges(
                         ptr,
@@ -389,19 +389,25 @@ PYBIND11_MODULE(PythonCDT, m)
             "erase_super_triangle",
             &Triangulation::eraseSuperTriangle,
             py::call_guard<py::gil_scoped_release>())
-        .def("erase_outer_triangles", &Triangulation::eraseOuterTriangles)
+        .def(
+            "erase_outer_triangles",
+            &Triangulation::eraseOuterTriangles,
+            py::call_guard<py::gil_scoped_release>())
         .def(
             "erase_outer_triangles_and_holes",
-            &Triangulation::eraseOuterTrianglesAndHoles)
+            &Triangulation::eraseOuterTrianglesAndHoles,
+            py::call_guard<py::gil_scoped_release>())
         .def("is_finalized", &Triangulation::isFinalized)
         .def(
             "calculate_triangle_depths",
-            &Triangulation::calculateTriangleDepths)
+            &Triangulation::calculateTriangleDepths,
+            py::call_guard<py::gil_scoped_release>())
         .def(
             "remove_triangles",
             static_cast<void (Triangulation::*)(const CDT::TriIndUSet&)>(
                 &Triangulation::removeTriangles),
-            py::arg("triangle_indices"));
+            py::arg("triangle_indices"),
+            py::call_guard<py::gil_scoped_release>());
 
     m.def(
         "verify_topology",
