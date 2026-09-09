@@ -11,6 +11,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <sstream>
 #include <utility>
@@ -204,6 +205,29 @@ PYBIND11_MODULE(PythonCDT, m)
                     t.triangles.begin(), t.triangles.end());
             },
             py::keep_alive<0, 1>())
+        // numpy read-back: the whole triangle vector in ONE memcpy, as a
+        // structured array over the dtype registered above. Reading
+        // t.triangles instead materialises a Python object per triangle,
+        // which on a large mesh costs more than the triangulation itself.
+        // Contents are as stored: the super-triangle's three vertices (indices
+        // 0-2) and the triangles touching them are present until an erase_*
+        // call finalizes the triangulation. A copy, so the array outlives
+        // any later change to the triangulation.
+        .def(
+            "triangles_as_array",
+            [](const Triangulation& t) {
+                py::array_t<CDT::Triangle> out(
+                    static_cast<py::ssize_t>(t.triangles.size()));
+                std::memcpy(
+                    out.mutable_data(),
+                    t.triangles.data(),
+                    t.triangles.size() * sizeof(CDT::Triangle));
+                return out;
+            },
+            "All triangles as a structured numpy array of shape (T,) with "
+            "uint32 fields 'vertices' (3,) and 'neighbors' (3,); "
+            "arr['vertices'] is the (T, 3) vertex-index array. Includes the "
+            "super-triangle until erase_super_triangle()")
         // fixed edges
         .def_readonly("fixed_edges", &Triangulation::fixedEdges)
         .def(
@@ -272,11 +296,16 @@ PYBIND11_MODULE(PythonCDT, m)
                 };
                 const std::size_t n_vert = info.size / 2;
                 const XY* const ptr = static_cast<XY*>(info.ptr);
-                t.insertVertices(
-                    ptr,
-                    ptr + n_vert,
-                    [](const XY& v) { return v.xy[0]; },
-                    [](const XY& v) { return v.xy[1]; });
+                {
+                    // The buffer is pinned by `info`; nothing below touches
+                    // Python, so other threads may run meanwhile.
+                    py::gil_scoped_release release;
+    t.insertVertices(
+                        ptr,
+                        ptr + n_vert,
+                        [](const XY& v) { return v.xy[0]; },
+                        [](const XY& v) { return v.xy[1]; });
+                }
             },
             py::arg("vertex_buffer"))
         .def(
@@ -311,11 +340,16 @@ PYBIND11_MODULE(PythonCDT, m)
                 };
                 const std::size_t n_vert = info.size / 2;
                 const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
-                t.insertEdges(
-                    ptr,
-                    ptr + n_vert,
-                    [](const EdgeData& e) { return e.vv[0]; },
-                    [](const EdgeData& e) { return e.vv[1]; });
+                {
+                    // The buffer is pinned by `info`; nothing below touches
+                    // Python, so other threads may run meanwhile.
+                    py::gil_scoped_release release;
+    t.insertEdges(
+                        ptr,
+                        ptr + n_vert,
+                        [](const EdgeData& e) { return e.vv[0]; },
+                        [](const EdgeData& e) { return e.vv[1]; });
+                }
             },
             py::arg("edge_buffer"))
         .def(
@@ -350,14 +384,22 @@ PYBIND11_MODULE(PythonCDT, m)
                 };
                 const std::size_t n_vert = info.size / 2;
                 const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
-                t.conformToEdges(
-                    ptr,
-                    ptr + n_vert,
-                    [](const EdgeData& e) { return e.vv[0]; },
-                    [](const EdgeData& e) { return e.vv[1]; });
+                {
+                    // The buffer is pinned by `info`; nothing below touches
+                    // Python, so other threads may run meanwhile.
+                    py::gil_scoped_release release;
+    t.conformToEdges(
+                        ptr,
+                        ptr + n_vert,
+                        [](const EdgeData& e) { return e.vv[0]; },
+                        [](const EdgeData& e) { return e.vv[1]; });
+                }
             },
             py::arg("edge_buffer"))
-        .def("erase_super_triangle", &Triangulation::eraseSuperTriangle)
+        .def(
+            "erase_super_triangle",
+            &Triangulation::eraseSuperTriangle,
+            py::call_guard<py::gil_scoped_release>())
         .def("erase_outer_triangles", &Triangulation::eraseOuterTriangles)
         .def(
             "erase_outer_triangles_and_holes",
@@ -375,5 +417,6 @@ PYBIND11_MODULE(PythonCDT, m)
     m.def(
         "verify_topology",
         &CDT::verifyTopology<coord_t, NearPointLocator_t>,
-        py::arg("triangulation"));
+        py::arg("triangulation"),
+        py::call_guard<py::gil_scoped_release>());
 }
