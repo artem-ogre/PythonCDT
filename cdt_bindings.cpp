@@ -29,6 +29,48 @@ using Triangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 namespace
 {
 
+template <typename T>
+struct BufferPair
+{
+    T v[2];
+};
+
+// Reads a C-contiguous buffer of shape (2N,) or (N, 2) as N pairs
+template <typename T>
+std::pair<const BufferPair<T>*, std::size_t> buffer_pairs(
+    const py::buffer_info& info,
+    const std::string& type_name,
+    const std::string& item_name)
+{
+    if (info.format != py::format_descriptor<T>::format())
+    {
+        throw std::runtime_error(
+            "Incompatible format: expected a " + type_name + " array!");
+    }
+    if (info.ndim != 1 && info.ndim != 2)
+    {
+        throw std::runtime_error("Incompatible buffer dimension!");
+    }
+    if (info.ndim == 2 ? info.shape[1] != 2 : info.shape[0] % 2 != 0)
+    {
+        throw std::runtime_error(
+            "Buffer must hold " + type_name + " pairs (2 per " + item_name +
+            "): shape (N, 2) or (2N,)!");
+    }
+    // strides of dimensions with a single element are irrelevant
+    py::ssize_t expected_stride = info.itemsize;
+    for (py::ssize_t d = info.ndim - 1; d >= 0; --d)
+    {
+        if (info.shape[d] > 1 && info.strides[d] != expected_stride)
+        {
+            throw std::runtime_error(
+                "Buffer must be C-contiguous: use numpy.ascontiguousarray!");
+        }
+        expected_stride *= info.shape[d];
+    }
+    return {static_cast<const BufferPair<T>*>(info.ptr), info.size / 2};
+}
+
 std::string TriInd2str(CDT::TriInd it)
 {
     return it != CDT::noNeighbor ? std::to_string(it) : "-";
@@ -267,35 +309,15 @@ PYBIND11_MODULE(PythonCDT, m)
             "insert_vertices",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format != py::format_descriptor<coord_t>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a double array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "coordinates (2 per vertex)!");
-                }
-                // create from buffer
-                struct XY
-                {
-                    coord_t xy[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const XY* const ptr = static_cast<XY*>(info.ptr);
+                const auto [ptr, n_vert] =
+                    buffer_pairs<coord_t>(info, "double", "vertex");
                 {
                     py::gil_scoped_release release;
                     t.insertVertices(
                         ptr,
                         ptr + n_vert,
-                        [](const XY& v) { return v.xy[0]; },
-                        [](const XY& v) { return v.xy[1]; });
+                        [](const BufferPair<coord_t>& v) { return v.v[0]; },
+                        [](const BufferPair<coord_t>& v) { return v.v[1]; });
                 }
             },
             py::arg("vertex_buffer"))
@@ -309,36 +331,15 @@ PYBIND11_MODULE(PythonCDT, m)
             "insert_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format !=
-                    py::format_descriptor<CDT::VertInd>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a CDT::VertInd array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "CDT::VertInd (2 per edge)!");
-                }
-                // create from buffer
-                struct EdgeData
-                {
-                    CDT::VertInd vv[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
+                const auto [ptr, n_edges] =
+                    buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
                 {
                     py::gil_scoped_release release;
                     t.insertEdges(
                         ptr,
-                        ptr + n_vert,
-                        [](const EdgeData& e) { return e.vv[0]; },
-                        [](const EdgeData& e) { return e.vv[1]; });
+                        ptr + n_edges,
+                        [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                        [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
                 }
             },
             py::arg("edge_buffer"))
@@ -352,36 +353,15 @@ PYBIND11_MODULE(PythonCDT, m)
             "conform_to_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format !=
-                    py::format_descriptor<CDT::VertInd>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a CDT::VertInd array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "CDT::VertInd (2 per edge)!");
-                }
-                // create from buffer
-                struct EdgeData
-                {
-                    CDT::VertInd vv[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
+                const auto [ptr, n_edges] =
+                    buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
                 {
                     py::gil_scoped_release release;
                     t.conformToEdges(
                         ptr,
-                        ptr + n_vert,
-                        [](const EdgeData& e) { return e.vv[0]; },
-                        [](const EdgeData& e) { return e.vv[1]; });
+                        ptr + n_edges,
+                        [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                        [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
                 }
             },
             py::arg("edge_buffer"))

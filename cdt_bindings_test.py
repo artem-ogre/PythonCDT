@@ -273,3 +273,28 @@ def test_insert_releases_the_gil() -> None:
     for th in threads:
         th.join()
     assert results == [expected] * 4, "Threaded builds must match the single-threaded build"
+
+
+def test_insert_buffers_must_be_contiguous_pairs() -> None:
+    """Buffer overloads reject buffers that aren't a C-contiguous run of pairs"""
+    vertices = np.array([[0, 0], [9, 9], [1, 0], [9, 9], [0, 1], [9, 9], [1, 1], [9, 9]], dtype=np.float64)
+    edges = np.array([[0, 1], [9, 9], [1, 3], [9, 9]], dtype=np.uintc)
+
+    def triangulation():
+        return cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
+
+    for bad in [vertices[::2], vertices[:, ::-1], np.asfortranarray(vertices[::2]), np.zeros((2, 3))]:
+        with pytest.raises(RuntimeError):
+            triangulation().insert_vertices(bad)
+    for insert in [cdt.Triangulation.insert_edges, cdt.Triangulation.conform_to_edges]:
+        t = triangulation()
+        t.insert_vertices(vertices[::2].copy())
+        with pytest.raises(RuntimeError):
+            insert(t, edges[::2])
+
+    for good in [vertices[::2].copy(), vertices[::2].ravel()]:
+        t = triangulation()
+        t.insert_vertices(good)
+        assert [(v.x, v.y) for v in t.vertices][3:] == [(0, 0), (1, 0), (0, 1), (1, 1)], "Wrong vertices inserted"
+    t.insert_edges(edges[::2].copy())
+    assert t.fixed_edges == {cdt.Edge(3, 4), cdt.Edge(4, 6)}, "Wrong edges inserted"
