@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import tempfile
 import hashlib
-import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import PythonCDT as cdt
 
@@ -73,6 +73,12 @@ def test_Triangulation() -> None:
     assert len(t.vertices) == 4, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 2, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 1, "Wrong fixed edge count in triangulation"
+
+    # properties give references into the triangulation
+    vertices = t.vertices
+    vertices[3].x = 42
+    assert t.vertices[3] == cdt.V2d(42, -0.5), "Vertex property must reference triangulation's vertices"
+    vertices[3].x = 0
 
     # test retrieving triangulation data using iterators
     assert t.vertices_count() == len(t.vertices), "Wrong vertex count"
@@ -213,30 +219,19 @@ def test_arrays(copy) -> None:
         assert np.array_equal(arr, before), "Array must stay valid after the triangulation is deleted"
 
 
-def test_insert_releases_the_gil() -> None:
-    """Concurrent builds on threads must each equal the single-threaded build."""
-    vv, ee = read_input_file("CDT/visualizer/data/Constrained Sweden.txt")
-    verts = np.array([[v.x, v.y] for v in vv], dtype=np.float64)
-    edges = np.array([[e.v1, e.v2] for e in ee], dtype=np.uintc)
+def test_shared_triangulation() -> None:
+    """Threads can insert into and read from one triangulation concurrently"""
+    vertices = np.random.default_rng(0).random((160_000, 2))
+    t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
 
-    def build() -> str:
-        t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
-        t.insert_vertices(verts)
-        t.insert_edges(edges)
-        t.erase_super_triangle()
-        assert cdt.verify_topology(t)
-        return triangulation_md5_checksum(t)
+    def insert_and_read(batch) -> None:
+        t.insert_vertices(batch)
+        assert t.triangles_array()["vertices"].max() < t.vertices_count()
 
-    expected = build()
-    results = [None] * 4
-    def worker(i):
-        results[i] = build()
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
-    for th in threads:
-        th.start()
-    for th in threads:
-        th.join()
-    assert results == [expected] * 4, "Threaded builds must match the single-threaded build"
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(insert_and_read, np.array_split(vertices, 8)))
+    assert t.vertices_count() == len(vertices) + 3, "All vertices plus the super-triangle must be inserted"
+    assert cdt.verify_topology(t)
 
 
 def test_insert_buffers_must_be_contiguous_pairs() -> None:

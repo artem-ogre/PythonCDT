@@ -11,6 +11,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <mutex>
 #include <string>
 #include <sstream>
 #include <utility>
@@ -23,22 +24,81 @@ namespace py = pybind11;
 using coord_t = double;
 using NearPointLocator_t = CDT::LocatorKDTree<coord_t>;
 using V2d = CDT::V2d<coord_t>;
-using Triangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
+using CdtTriangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 
 namespace
 {
+
+// CDT triangulation shared by Python threads, reachable only through lock()
+class Triangulation
+{
+public:
+    Triangulation(
+        CDT::VertexInsertionOrder::Enum vertexInsertionOrder,
+        CDT::IntersectingConstraintEdges::Enum intersectingEdgesStrategy,
+        coord_t minDistToConstraintEdge)
+        : m_cdt(
+              vertexInsertionOrder,
+              intersectingEdgesStrategy,
+              minDistToConstraintEdge)
+    {}
+
+    // Waits without the GIL, since the thread holding the mutex may need it
+    std::pair<CdtTriangulation&, std::unique_lock<std::mutex>> lock()
+    {
+        py::gil_scoped_release release;
+        return {m_cdt, std::unique_lock<std::mutex>(m_mutex)};
+    }
+
+private:
+    CdtTriangulation m_cdt;
+    std::mutex m_mutex;
+};
+
+// Binds a container member as property `name`, `name_count()` and `name_iter()`
+template <typename Container>
+void def_container(
+    py::class_<Triangulation>& cls,
+    const std::string& name,
+    Container CdtTriangulation::*member)
+{
+    cls.def_property_readonly(
+           name.c_str(),
+           [member](Triangulation& t) {
+               auto [cdt, lock] = t.lock();
+               return py::cast(
+                   cdt.*member,
+                   py::return_value_policy::reference_internal,
+                   py::cast(&t));
+           })
+        .def(
+            (name + "_count").c_str(),
+            [member](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                return (cdt.*member).size();
+            })
+        .def(
+            (name + "_iter").c_str(),
+            [member](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                const Container& container = cdt.*member;
+                return py::make_iterator(container.begin(), container.end());
+            },
+            py::keep_alive<0, 1>());
+}
 
 // Binds a vector member as `name_array(*, copy=True)` returning a numpy array
 template <typename T>
 void def_array(
     py::class_<Triangulation>& cls,
     const std::string& name,
-    std::vector<T> Triangulation::*member)
+    std::vector<T> CdtTriangulation::*member)
 {
     cls.def(
         (name + "_array").c_str(),
-        [member](const Triangulation& t, bool copy) {
-            const std::vector<T>& items = t.*member;
+        [member](Triangulation& t, bool copy) {
+            auto [cdt, lock] = t.lock();
+            const std::vector<T>& items = cdt.*member;
             const auto size = static_cast<py::ssize_t>(items.size());
             if (copy)
                 return py::array_t<T>(size, items.data());
@@ -241,170 +301,145 @@ PYBIND11_MODULE(PythonCDT, m)
         });
 
     py::class_<Triangulation> triangulation(m, "Triangulation");
+    triangulation.def(
+        py::init<
+            CDT::VertexInsertionOrder::Enum,
+            CDT::IntersectingConstraintEdges::Enum,
+            coord_t>(),
+        py::arg("vertex_insertion_order"),
+        py::arg("intersecting_edges_strategy"),
+        py::arg("min_dist_to_constraint_edge"));
+    def_container(triangulation, "vertices", &CdtTriangulation::vertices);
+    def_container(triangulation, "triangles", &CdtTriangulation::triangles);
+    def_container(triangulation, "fixed_edges", &CdtTriangulation::fixedEdges);
+    def_container(
+        triangulation, "overlap_count", &CdtTriangulation::overlapCount);
+    def_container(
+        triangulation,
+        "piece_to_originals",
+        &CdtTriangulation::pieceToOriginals);
+    def_array(triangulation, "vertices", &CdtTriangulation::vertices);
+    def_array(triangulation, "triangles", &CdtTriangulation::triangles);
     triangulation
-        .def(
-            py::init<
-                CDT::VertexInsertionOrder::Enum,
-                CDT::IntersectingConstraintEdges::Enum,
-                coord_t>(),
-            py::arg("vertex_insertion_order"),
-            py::arg("intersecting_edges_strategy"),
-            py::arg("min_dist_to_constraint_edge"))
-        // vertices
-        .def_readonly("vertices", &Triangulation::vertices)
-        .def(
-            "vertices_count",
-            [](const Triangulation& t) { return t.vertices.size(); })
-        .def(
-            "vertices_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(t.vertices.begin(), t.vertices.end());
-            },
-            py::keep_alive<0, 1>())
-        // triangles
-        .def_readonly("triangles", &Triangulation::triangles)
-        .def(
-            "triangles_count",
-            [](const Triangulation& t) { return t.triangles.size(); })
-        .def(
-            "triangles_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.triangles.begin(), t.triangles.end());
-            },
-            py::keep_alive<0, 1>())
-        // fixed edges
-        .def_readonly("fixed_edges", &Triangulation::fixedEdges)
-        .def(
-            "fixed_edges_count",
-            [](const Triangulation& t) { return t.fixedEdges.size(); })
-        .def(
-            "fixed_edges_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.fixedEdges.begin(), t.fixedEdges.end());
-            },
-            py::keep_alive<0, 1>())
-        // overlaps
-        .def_readonly("overlap_count", &Triangulation::overlapCount)
-        .def(
-            "overlap_count_count",
-            [](const Triangulation& t) { return t.overlapCount.size(); })
-        .def(
-            "overlap_count_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.overlapCount.begin(), t.overlapCount.end());
-            },
-            py::keep_alive<0, 1>())
-        // piece to originals mapping for edges
-        .def_readonly("piece_to_originals", &Triangulation::pieceToOriginals)
-        .def(
-            "piece_to_originals_count",
-            [](const Triangulation& t) { return t.pieceToOriginals.size(); })
-        .def(
-            "piece_to_originals_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.pieceToOriginals.begin(), t.pieceToOriginals.end());
-            },
-            py::keep_alive<0, 1>())
         // methods
         .def(
             "insert_vertices",
-            static_cast<void (Triangulation::*)(const std::vector<V2d>&)>(
-                &Triangulation::insertVertices),
-            py::arg("vertices"),
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t, const std::vector<V2d>& vertices) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.insertVertices(vertices);
+            },
+            py::arg("vertices"))
         .def(
             "insert_vertices",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_vert] =
                     buffer_pairs<coord_t>(info, "double", "vertex");
-                {
-                    py::gil_scoped_release release;
-                    t.insertVertices(
-                        ptr,
-                        ptr + n_vert,
-                        [](const BufferPair<coord_t>& v) { return v.v[0]; },
-                        [](const BufferPair<coord_t>& v) { return v.v[1]; });
-                }
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.insertVertices(
+                    ptr,
+                    ptr + n_vert,
+                    [](const BufferPair<coord_t>& v) { return v.v[0]; },
+                    [](const BufferPair<coord_t>& v) { return v.v[1]; });
             },
             py::arg("vertex_buffer"))
         .def(
             "insert_edges",
-            static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
-                &Triangulation::insertEdges),
-            py::arg("edges"),
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.insertEdges(edges);
+            },
+            py::arg("edges"))
         .def(
             "insert_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_edges] =
                     buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
-                {
-                    py::gil_scoped_release release;
-                    t.insertEdges(
-                        ptr,
-                        ptr + n_edges,
-                        [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
-                        [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
-                }
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.insertEdges(
+                    ptr,
+                    ptr + n_edges,
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
             },
             py::arg("edge_buffer"))
         .def(
             "conform_to_edges",
-            static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
-                &Triangulation::conformToEdges),
-            py::arg("edges"),
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.conformToEdges(edges);
+            },
+            py::arg("edges"))
         .def(
             "conform_to_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_edges] =
                     buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
-                {
-                    py::gil_scoped_release release;
-                    t.conformToEdges(
-                        ptr,
-                        ptr + n_edges,
-                        [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
-                        [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
-                }
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.conformToEdges(
+                    ptr,
+                    ptr + n_edges,
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
             },
             py::arg("edge_buffer"))
         .def(
             "erase_super_triangle",
-            &Triangulation::eraseSuperTriangle,
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.eraseSuperTriangle();
+            })
         .def(
             "erase_outer_triangles",
-            &Triangulation::eraseOuterTriangles,
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.eraseOuterTriangles();
+            })
         .def(
             "erase_outer_triangles_and_holes",
-            &Triangulation::eraseOuterTrianglesAndHoles,
-            py::call_guard<py::gil_scoped_release>())
-        .def("is_finalized", &Triangulation::isFinalized)
+            [](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.eraseOuterTrianglesAndHoles();
+            })
+        .def(
+            "is_finalized",
+            [](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                return cdt.isFinalized();
+            })
         .def(
             "calculate_triangle_depths",
-            &Triangulation::calculateTriangleDepths,
-            py::call_guard<py::gil_scoped_release>())
+            [](Triangulation& t) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                return cdt.calculateTriangleDepths();
+            })
         .def(
             "remove_triangles",
-            static_cast<void (Triangulation::*)(const CDT::TriIndUSet&)>(
-                &Triangulation::removeTriangles),
-            py::arg("triangle_indices"),
-            py::call_guard<py::gil_scoped_release>());
-    def_array(triangulation, "vertices", &Triangulation::vertices);
-    def_array(triangulation, "triangles", &Triangulation::triangles);
+            [](Triangulation& t, const CDT::TriIndUSet& triangle_indices) {
+                auto [cdt, lock] = t.lock();
+                py::gil_scoped_release release;
+                cdt.removeTriangles(triangle_indices);
+            },
+            py::arg("triangle_indices"));
 
     m.def(
         "verify_topology",
-        &CDT::verifyTopology<coord_t, NearPointLocator_t>,
-        py::arg("triangulation"),
-        py::call_guard<py::gil_scoped_release>());
+        [](Triangulation& t) {
+            auto [cdt, lock] = t.lock();
+            py::gil_scoped_release release;
+            return CDT::verifyTopology(cdt);
+        },
+        py::arg("triangulation"));
 }

@@ -35,6 +35,12 @@ triangles["vertices"]            # (T, 3) vertex indices into vertices
 `vertices_array()` and `triangles_array()` return copies. With `copy=False` they return read-only views of the
 triangulation's memory without copying; a view is invalidated by any call that modifies the triangulation.
 
+### Threads
+
+Triangulating releases the GIL, so separate triangulations can be built in parallel on Python threads.
+One triangulation can be shared between threads: calls on it wait for each other.
+Iterators (`*_iter()`) and `copy=False` views are not protected: don't use them while another thread modifies the triangulation.
+
 ## License
 [Mozilla Public License, v. 2.0](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
 
