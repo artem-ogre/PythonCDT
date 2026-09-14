@@ -11,7 +11,6 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
-#include <cstring>
 #include <string>
 #include <sstream>
 #include <utility>
@@ -28,6 +27,32 @@ using Triangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 
 namespace
 {
+
+// Binds a vector member as `name_array(*, copy=True)` returning a numpy array
+template <typename T>
+void def_array(
+    py::class_<Triangulation>& cls,
+    const std::string& name,
+    std::vector<T> Triangulation::*member)
+{
+    cls.def(
+        (name + "_array").c_str(),
+        [member](const Triangulation& t, bool copy) {
+            const std::vector<T>& items = t.*member;
+            const auto size = static_cast<py::ssize_t>(items.size());
+            if (copy)
+                return py::array_t<T>(size, items.data());
+            // the view's base is the Python wrapper of t, keeping t alive
+            py::array_t<T> view(size, items.data(), py::cast(&t));
+            view.attr("setflags")(py::arg("write") = false);
+            return view;
+        },
+        py::kw_only(),
+        py::arg("copy") = true,
+        "Copy as a numpy structured array. copy=False returns a read-only view "
+        "of the triangulation's memory instead; it is invalidated by any call "
+        "that modifies the triangulation.");
+}
 
 template <typename T>
 struct BufferPair
@@ -215,7 +240,8 @@ PYBIND11_MODULE(PythonCDT, m)
             return oss.str();
         });
 
-    py::class_<Triangulation>(m, "Triangulation")
+    py::class_<Triangulation> triangulation(m, "Triangulation");
+    triangulation
         .def(
             py::init<
                 CDT::VertexInsertionOrder::Enum,
@@ -247,21 +273,6 @@ PYBIND11_MODULE(PythonCDT, m)
                     t.triangles.begin(), t.triangles.end());
             },
             py::keep_alive<0, 1>())
-        .def(
-            "triangles_as_array",
-            [](const Triangulation& t) {
-                py::array_t<CDT::Triangle> out(
-                    static_cast<py::ssize_t>(t.triangles.size()));
-                std::memcpy(
-                    out.mutable_data(),
-                    t.triangles.data(),
-                    t.triangles.size() * sizeof(CDT::Triangle));
-                return out;
-            },
-            "All triangles as a structured numpy array of shape (T,) with "
-            "uint32 fields 'vertices' (3,) and 'neighbors' (3,); "
-            "arr['vertices'] is the (T, 3) vertex-index array. Includes the "
-            "super-triangle until erase_super_triangle()")
         // fixed edges
         .def_readonly("fixed_edges", &Triangulation::fixedEdges)
         .def(
@@ -388,6 +399,8 @@ PYBIND11_MODULE(PythonCDT, m)
                 &Triangulation::removeTriangles),
             py::arg("triangle_indices"),
             py::call_guard<py::gil_scoped_release>());
+    def_array(triangulation, "vertices", &Triangulation::vertices);
+    def_array(triangulation, "triangles", &Triangulation::triangles);
 
     m.def(
         "verify_topology",

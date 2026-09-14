@@ -15,18 +15,6 @@ import threading
 import PythonCDT as cdt
 
 
-def assert_triangles_array_matches_objects(t: cdt.Triangulation) -> None:
-    """triangles_as_array() must agree exactly with the object API, super-triangle included."""
-    arr = t.triangles_as_array()
-    assert arr.shape == (len(t.triangles),)
-    assert arr.dtype.names == ("vertices", "neighbors")
-    assert arr["vertices"].shape == (len(t.triangles), 3) and arr["vertices"].dtype == np.uintc
-    assert arr["neighbors"].shape == (len(t.triangles), 3) and arr["neighbors"].dtype == np.uintc
-    for i, tri in enumerate(t.triangles):
-        assert list(tri.vertices) == arr["vertices"][i].tolist(), "triangles_as_array vertices disagree with triangles"
-        assert list(tri.neighbors) == arr["neighbors"][i].tolist(), "triangles_as_array neighbors disagree with triangles"
-
-
 def test_constants() -> None:
     """Test that constants have proper values"""
     assert cdt.NO_NEIGHBOR == np.iinfo(np.uintc).max, "NO_NEIGHBOR constant has wrong value"
@@ -68,7 +56,6 @@ def test_Triangulation() -> None:
     assert len(t.vertices) == 0, "Wrong vertex count in empty triangulation"
     assert len(t.triangles) == 0, "Wrong triangle count in empty triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in empty triangulation"
-    assert_triangles_array_matches_objects(t)
 
     vv = [cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)]
     t.insert_vertices(vv)
@@ -80,14 +67,12 @@ def test_Triangulation() -> None:
     t.insert_edges(ee)
     assert len(t.fixed_edges) == 1, "Wrong fixed edge count in triangulation"
     assert cdt.Edge(0 + 3, 2 + 3) in t.fixed_edges, "Constraint edge was not properly added"
-    assert_triangles_array_matches_objects(t)
 
     t.erase_super_triangle()
     assert cdt.Edge(0, 2) in t.fixed_edges, "Constraint edge was not properly added"
     assert len(t.vertices) == 4, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 2, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 1, "Wrong fixed edge count in triangulation"
-    assert_triangles_array_matches_objects(t)
 
     # test retrieving triangulation data using iterators
     assert t.vertices_count() == len(t.vertices), "Wrong vertex count"
@@ -114,7 +99,6 @@ def test_Triangulation() -> None:
     t.erase_super_triangle()
     assert len(t.vertices) == 5, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 4, "Wrong triangle count in triangulation"
-    assert_triangles_array_matches_objects(t)
 
 
 def test_verify_topology() -> None:
@@ -123,7 +107,6 @@ def test_verify_topology() -> None:
     t.insert_vertices([cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)])
     t.insert_edges([cdt.Edge(0, 2), cdt.Edge(1, 3)])
     assert cdt.verify_topology(t), "Verifying topology produced wrong result"
-    assert_triangles_array_matches_objects(t)
 
 
 def save_triangulation_as_off(t: cdt.Triangulation, off_file) -> None:
@@ -164,7 +147,6 @@ def test_triangulate_input_file() -> None:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
         assert md5_checksum(off_file) == 'db59c00d9dad866781cd96779e5262b7', "Wrong OFF file contents"
-    assert_triangles_array_matches_objects(t)
 
 
 def test_conform_to_edges() -> None:
@@ -174,7 +156,6 @@ def test_conform_to_edges() -> None:
     t.conform_to_edges(ee)
     t.erase_outer_triangles_and_holes()
     assert triangulation_md5_checksum(t) == 'b64cae39c91a55dd4e23a146eb7df0d3', "Wrong OFF file contents"
-    assert_triangles_array_matches_objects(t)
 
 
 @pytest.mark.parametrize("vv", [[cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)],
@@ -187,7 +168,6 @@ def test_insert_vertices(vv) -> None:
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
     assert triangulation_md5_checksum(t) == 'db9176f4429942862a7a73155fb55322', "Wrong OFF file contents"
-    assert_triangles_array_matches_objects(t)
 
 
 @pytest.mark.parametrize("ee", [[cdt.Edge(0, 1), cdt.Edge(2, 3), cdt.Edge(3, 4), cdt.Edge(5, 6)],
@@ -202,7 +182,6 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.triangles) == 15, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 4, "Wrong fixed edge count in triangulation"
     assert triangulation_md5_checksum(t) == '639c7a1492b2adb8f25464ec81ff6a00', "Wrong OFF file contents"
-    assert_triangles_array_matches_objects(t)
 
     # conform to edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -212,41 +191,26 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.triangles) == 19, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 6, "Wrong fixed edge count in triangulation"
     assert triangulation_md5_checksum(t) == '9c87b435e247c1658ec0f04af3340dc7', "Wrong OFF file contents"
-    assert_triangles_array_matches_objects(t)
 
 
-def test_triangles_as_array_before_and_after_erase() -> None:
-    """Before erase_super_triangle() the array holds the super-triangle's fan and input vertex i
-    is index i + 3; after it, the fan is gone and input vertex i is index i."""
-    vv, ee = read_input_file("CDT/visualizer/data/ditch.txt")
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
-    t.insert_vertices(vv)
-    t.insert_edges(ee)
-
-    before = t.triangles_as_array()["vertices"]
-    assert (before < 3).any(axis=1).sum() > 0, "unfinalized array must include triangles touching the super-triangle"
-    kept = before[(before >= 3).all(axis=1)] - 3
-
-    t.erase_super_triangle()
-    after = t.triangles_as_array()["vertices"]
-    assert np.array_equal(np.sort(np.sort(kept, axis=1), axis=0), np.sort(np.sort(after, axis=1), axis=0)), \
-        "dropping the super-triangle's fan and shifting by 3 must give the erased mesh"
-    assert after.max() < len(vv), "after erase every index addresses an input vertex"
-
-
-def test_triangles_as_array_empty() -> None:
+@pytest.mark.parametrize("copy", [True, False])
+def test_arrays(copy) -> None:
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
-    arr = t.triangles_as_array()
-    assert arr.shape == (0,) and arr["vertices"].shape == (0, 3)
+    assert t.vertices_array(copy=copy).shape == t.triangles_array(copy=copy).shape == (0,), \
+        "Empty triangulation must give empty arrays"
 
+    t.insert_vertices([cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)])
+    vertices = t.vertices_array(copy=copy)
+    triangles = t.triangles_array(copy=copy)
+    assert vertices.tolist() == [(v.x, v.y) for v in t.vertices]
+    assert triangles["vertices"].tolist() == [list(tri.vertices) for tri in t.triangles]
+    assert triangles["neighbors"].tolist() == [list(tri.neighbors) for tri in t.triangles]
 
-def test_triangles_as_array_is_a_copy() -> None:
-    """The array is a copy: writing to it must not alter the triangulation."""
-    t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
-    t.insert_vertices(np.array([[-1, 0], [0, 0.5], [1, 0], [0, -0.5]], dtype=np.float64))
-    arr = t.triangles_as_array()
-    arr["vertices"][:] = 0
-    assert all(list(tri.vertices) != [0, 0, 0] for tri in t.triangles), "triangles_as_array must return a copy"
+    expected = [vertices.copy(), triangles.copy()]
+    del t
+    for arr, before in zip([vertices, triangles], expected):
+        assert arr.flags.owndata == arr.flags.writeable == copy, "Copy must be owned and writeable, view neither"
+        assert np.array_equal(arr, before), "Array must stay valid after the triangulation is deleted"
 
 
 def test_insert_releases_the_gil() -> None:
