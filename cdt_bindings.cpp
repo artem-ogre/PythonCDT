@@ -29,30 +29,33 @@ using CdtTriangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 namespace
 {
 
-// CDT triangulation shared by Python threads, reachable only through lock()
-class Triangulation
+struct Triangulation : CdtTriangulation
 {
-public:
-    Triangulation(
-        CDT::VertexInsertionOrder::Enum vertexInsertionOrder,
-        CDT::IntersectingConstraintEdges::Enum intersectingEdgesStrategy,
-        coord_t minDistToConstraintEdge)
-        : m_cdt(
-              vertexInsertionOrder,
-              intersectingEdgesStrategy,
-              minDistToConstraintEdge)
+    using CdtTriangulation::CdtTriangulation;
+    std::mutex mutex;
+};
+
+struct LockWithoutGil
+{
+    explicit LockWithoutGil(Triangulation& t)
+        : lock(t.mutex)
     {}
+    py::gil_scoped_release release; // constructed first, destroyed last
+    std::lock_guard<std::mutex> lock;
+};
 
-    // Waits without the GIL, since the thread holding the mutex may need it
-    std::pair<CdtTriangulation&, std::unique_lock<std::mutex>> lock()
+struct LockWithGil
+{
+    explicit LockWithGil(Triangulation& t)
+        : lock(t.mutex, std::try_to_lock)
     {
-        py::gil_scoped_release release;
-        return {m_cdt, std::unique_lock<std::mutex>(m_mutex)};
+        if(!lock.owns_lock())
+        {
+            py::gil_scoped_release release;
+            lock.lock();
+        }
     }
-
-private:
-    CdtTriangulation m_cdt;
-    std::mutex m_mutex;
+    std::unique_lock<std::mutex> lock;
 };
 
 // Binds a container member as property `name`, `name_count()` and `name_iter()`
@@ -65,26 +68,30 @@ void def_container(
     cls.def_property_readonly(
            name.c_str(),
            [member](Triangulation& t) {
-               auto [cdt, lock] = t.lock();
+               LockWithGil lock(t);
                return py::cast(
-                   cdt.*member,
+                   t.*member,
                    py::return_value_policy::reference_internal,
                    py::cast(&t));
-           })
+           },
+           "Items reference the triangulation's memory; they are invalidated "
+           "by any call that modifies the triangulation.")
         .def(
             (name + "_count").c_str(),
             [member](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                return (cdt.*member).size();
+                LockWithGil lock(t);
+                return (t.*member).size();
             })
         .def(
             (name + "_iter").c_str(),
             [member](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                const Container& container = cdt.*member;
+                LockWithGil lock(t);
+                const Container& container = t.*member;
                 return py::make_iterator(container.begin(), container.end());
             },
-            py::keep_alive<0, 1>());
+            py::keep_alive<0, 1>(),
+            "Iterates the triangulation's memory; the iterator is invalidated "
+            "by any call that modifies the triangulation.");
 }
 
 // Binds a vector member as `name_array(*, copy=True)` returning a numpy array
@@ -97,8 +104,8 @@ void def_array(
     cls.def(
         (name + "_array").c_str(),
         [member](Triangulation& t, bool copy) {
-            auto [cdt, lock] = t.lock();
-            const std::vector<T>& items = cdt.*member;
+            LockWithGil lock(t);
+            const std::vector<T>& items = t.*member;
             const auto size = static_cast<py::ssize_t>(items.size());
             if (copy)
                 return py::array_t<T>(size, items.data());
@@ -325,9 +332,8 @@ PYBIND11_MODULE(PythonCDT, m)
         .def(
             "insert_vertices",
             [](Triangulation& t, const std::vector<V2d>& vertices) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.insertVertices(vertices);
+                LockWithoutGil lock(t);
+                t.insertVertices(vertices);
             },
             py::arg("vertices"))
         .def(
@@ -336,9 +342,8 @@ PYBIND11_MODULE(PythonCDT, m)
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_vert] =
                     buffer_pairs<coord_t>(info, "double", "vertex");
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.insertVertices(
+                LockWithoutGil lock(t);
+                t.insertVertices(
                     ptr,
                     ptr + n_vert,
                     [](const BufferPair<coord_t>& v) { return v.v[0]; },
@@ -348,9 +353,8 @@ PYBIND11_MODULE(PythonCDT, m)
         .def(
             "insert_edges",
             [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.insertEdges(edges);
+                LockWithoutGil lock(t);
+                t.insertEdges(edges);
             },
             py::arg("edges"))
         .def(
@@ -359,9 +363,8 @@ PYBIND11_MODULE(PythonCDT, m)
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_edges] =
                     buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.insertEdges(
+                LockWithoutGil lock(t);
+                t.insertEdges(
                     ptr,
                     ptr + n_edges,
                     [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
@@ -371,9 +374,8 @@ PYBIND11_MODULE(PythonCDT, m)
         .def(
             "conform_to_edges",
             [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.conformToEdges(edges);
+                LockWithoutGil lock(t);
+                t.conformToEdges(edges);
             },
             py::arg("edges"))
         .def(
@@ -382,9 +384,8 @@ PYBIND11_MODULE(PythonCDT, m)
                 const py::buffer_info info = b.request();
                 const auto [ptr, n_edges] =
                     buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.conformToEdges(
+                LockWithoutGil lock(t);
+                t.conformToEdges(
                     ptr,
                     ptr + n_edges,
                     [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
@@ -394,52 +395,46 @@ PYBIND11_MODULE(PythonCDT, m)
         .def(
             "erase_super_triangle",
             [](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.eraseSuperTriangle();
+                LockWithoutGil lock(t);
+                t.eraseSuperTriangle();
             })
         .def(
             "erase_outer_triangles",
             [](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.eraseOuterTriangles();
+                LockWithoutGil lock(t);
+                t.eraseOuterTriangles();
             })
         .def(
             "erase_outer_triangles_and_holes",
             [](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.eraseOuterTrianglesAndHoles();
+                LockWithoutGil lock(t);
+                t.eraseOuterTrianglesAndHoles();
             })
         .def(
             "is_finalized",
             [](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                return cdt.isFinalized();
+                LockWithGil lock(t);
+                return t.isFinalized();
             })
         .def(
             "calculate_triangle_depths",
             [](Triangulation& t) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                return cdt.calculateTriangleDepths();
+                LockWithoutGil lock(t);
+                return t.calculateTriangleDepths();
             })
         .def(
             "remove_triangles",
             [](Triangulation& t, const CDT::TriIndUSet& triangle_indices) {
-                auto [cdt, lock] = t.lock();
-                py::gil_scoped_release release;
-                cdt.removeTriangles(triangle_indices);
+                LockWithoutGil lock(t);
+                t.removeTriangles(triangle_indices);
             },
             py::arg("triangle_indices"));
 
     m.def(
         "verify_topology",
         [](Triangulation& t) {
-            auto [cdt, lock] = t.lock();
-            py::gil_scoped_release release;
-            return CDT::verifyTopology(cdt);
+            LockWithoutGil lock(t);
+            return CDT::verifyTopology(t);
         },
         py::arg("triangulation"));
 }
