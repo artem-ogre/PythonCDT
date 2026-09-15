@@ -11,6 +11,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <mutex>
 #include <string>
 #include <sstream>
 #include <utility>
@@ -23,10 +24,144 @@ namespace py = pybind11;
 using coord_t = double;
 using NearPointLocator_t = CDT::LocatorKDTree<coord_t>;
 using V2d = CDT::V2d<coord_t>;
-using Triangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
+using CdtTriangulation = CDT::Triangulation<coord_t, NearPointLocator_t>;
 
 namespace
 {
+
+struct Triangulation : CdtTriangulation
+{
+    using CdtTriangulation::CdtTriangulation;
+    std::mutex mutex;
+};
+
+struct LockWithoutGil
+{
+    explicit LockWithoutGil(Triangulation& t)
+        : lock(t.mutex)
+    {}
+    py::gil_scoped_release release; // constructed first, destroyed last
+    std::lock_guard<std::mutex> lock;
+};
+
+struct LockWithGil
+{
+    explicit LockWithGil(Triangulation& t)
+        : lock(t.mutex, std::try_to_lock)
+    {
+        if(!lock.owns_lock())
+        {
+            py::gil_scoped_release release;
+            lock.lock();
+        }
+    }
+    std::unique_lock<std::mutex> lock;
+};
+
+// Binds a container member as property `name`, `name_count()` and `name_iter()`
+template <typename Container>
+void def_container(
+    py::class_<Triangulation>& cls,
+    const std::string& name,
+    Container CdtTriangulation::*member)
+{
+    cls.def_property_readonly(
+           name.c_str(),
+           [member](Triangulation& t) {
+               LockWithGil lock(t);
+               return py::cast(
+                   t.*member,
+                   py::return_value_policy::reference_internal,
+                   py::cast(&t));
+           },
+           "Items reference the triangulation's memory; they are invalidated "
+           "by any call that modifies the triangulation.")
+        .def(
+            (name + "_count").c_str(),
+            [member](Triangulation& t) {
+                LockWithGil lock(t);
+                return (t.*member).size();
+            })
+        .def(
+            (name + "_iter").c_str(),
+            [member](Triangulation& t) {
+                LockWithGil lock(t);
+                const Container& container = t.*member;
+                return py::make_iterator(container.begin(), container.end());
+            },
+            py::keep_alive<0, 1>(),
+            "Iterates the triangulation's memory; the iterator is invalidated "
+            "by any call that modifies the triangulation.");
+}
+
+// Binds a vector member as `name_array(*, copy=True)` returning a numpy array
+template <typename T>
+void def_array(
+    py::class_<Triangulation>& cls,
+    const std::string& name,
+    std::vector<T> CdtTriangulation::*member)
+{
+    cls.def(
+        (name + "_array").c_str(),
+        [member](Triangulation& t, bool copy) {
+            LockWithGil lock(t);
+            const std::vector<T>& items = t.*member;
+            const auto size = static_cast<py::ssize_t>(items.size());
+            if (copy)
+                return py::array_t<T>(size, items.data());
+            // the view's base is the Python wrapper of t, keeping t alive
+            py::array_t<T> view(size, items.data(), py::cast(&t));
+            view.attr("setflags")(py::arg("write") = false);
+            return view;
+        },
+        py::kw_only(),
+        py::arg("copy") = true,
+        "Copy as a numpy structured array. copy=False returns a read-only view "
+        "of the triangulation's memory instead; it is invalidated by any call "
+        "that modifies the triangulation.");
+}
+
+template <typename T>
+struct BufferPair
+{
+    T v[2];
+};
+
+// Reads a C-contiguous buffer of shape (2N,) or (N, 2) as N pairs
+template <typename T>
+std::pair<const BufferPair<T>*, std::size_t> buffer_pairs(
+    const py::buffer_info& info,
+    const std::string& type_name,
+    const std::string& item_name)
+{
+    if (info.format != py::format_descriptor<T>::format())
+    {
+        throw std::runtime_error(
+            "Incompatible format: expected a " + type_name + " array!");
+    }
+    if (info.ndim != 1 && info.ndim != 2)
+    {
+        throw std::runtime_error("Incompatible buffer dimension!");
+    }
+    if (info.ndim == 2 ? info.shape[1] != 2 : info.shape[0] % 2 != 0)
+    {
+        throw std::runtime_error(
+            "Buffer must hold " + type_name + " pairs (2 per " + item_name +
+            "): shape (N, 2) or (2N,)!");
+    }
+    // strides of dimensions with a single element are irrelevant
+    py::ssize_t expected_stride = info.itemsize;
+    for (py::ssize_t d = info.ndim - 1; d >= 0; --d)
+    {
+        if (info.shape[d] > 1 && info.strides[d] != expected_stride)
+        {
+            throw std::runtime_error(
+                "Buffer must be C-contiguous: use numpy.ascontiguousarray!");
+        }
+        expected_stride *= info.shape[d];
+    }
+    return {static_cast<const BufferPair<T>*>(info.ptr), info.size / 2};
+}
 
 std::string TriInd2str(CDT::TriInd it)
 {
@@ -172,208 +307,134 @@ PYBIND11_MODULE(PythonCDT, m)
             return oss.str();
         });
 
-    py::class_<Triangulation>(m, "Triangulation")
-        .def(
-            py::init<
-                CDT::VertexInsertionOrder::Enum,
-                CDT::IntersectingConstraintEdges::Enum,
-                coord_t>(),
-            py::arg("vertex_insertion_order"),
-            py::arg("intersecting_edges_strategy"),
-            py::arg("min_dist_to_constraint_edge"))
-        // vertices
-        .def_readonly("vertices", &Triangulation::vertices)
-        .def(
-            "vertices_count",
-            [](const Triangulation& t) { return t.vertices.size(); })
-        .def(
-            "vertices_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(t.vertices.begin(), t.vertices.end());
-            },
-            py::keep_alive<0, 1>())
-        // triangles
-        .def_readonly("triangles", &Triangulation::triangles)
-        .def(
-            "triangles_count",
-            [](const Triangulation& t) { return t.triangles.size(); })
-        .def(
-            "triangles_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.triangles.begin(), t.triangles.end());
-            },
-            py::keep_alive<0, 1>())
-        // fixed edges
-        .def_readonly("fixed_edges", &Triangulation::fixedEdges)
-        .def(
-            "fixed_edges_count",
-            [](const Triangulation& t) { return t.fixedEdges.size(); })
-        .def(
-            "fixed_edges_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.fixedEdges.begin(), t.fixedEdges.end());
-            },
-            py::keep_alive<0, 1>())
-        // overlaps
-        .def_readonly("overlap_count", &Triangulation::overlapCount)
-        .def(
-            "overlap_count_count",
-            [](const Triangulation& t) { return t.overlapCount.size(); })
-        .def(
-            "overlap_count_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.overlapCount.begin(), t.overlapCount.end());
-            },
-            py::keep_alive<0, 1>())
-        // piece to originals mapping for edges
-        .def_readonly("piece_to_originals", &Triangulation::pieceToOriginals)
-        .def(
-            "piece_to_originals_count",
-            [](const Triangulation& t) { return t.pieceToOriginals.size(); })
-        .def(
-            "piece_to_originals_iter",
-            [](const Triangulation& t) -> py::iterator {
-                return py::make_iterator(
-                    t.pieceToOriginals.begin(), t.pieceToOriginals.end());
-            },
-            py::keep_alive<0, 1>())
+    py::class_<Triangulation> triangulation(m, "Triangulation");
+    triangulation.def(
+        py::init<
+            CDT::VertexInsertionOrder::Enum,
+            CDT::IntersectingConstraintEdges::Enum,
+            coord_t>(),
+        py::arg("vertex_insertion_order"),
+        py::arg("intersecting_edges_strategy"),
+        py::arg("min_dist_to_constraint_edge"));
+    def_container(triangulation, "vertices", &CdtTriangulation::vertices);
+    def_container(triangulation, "triangles", &CdtTriangulation::triangles);
+    def_container(triangulation, "fixed_edges", &CdtTriangulation::fixedEdges);
+    def_container(
+        triangulation, "overlap_count", &CdtTriangulation::overlapCount);
+    def_container(
+        triangulation,
+        "piece_to_originals",
+        &CdtTriangulation::pieceToOriginals);
+    def_array(triangulation, "vertices", &CdtTriangulation::vertices);
+    def_array(triangulation, "triangles", &CdtTriangulation::triangles);
+    triangulation
         // methods
         .def(
             "insert_vertices",
-            static_cast<void (Triangulation::*)(const std::vector<V2d>&)>(
-                &Triangulation::insertVertices),
+            [](Triangulation& t, const std::vector<V2d>& vertices) {
+                LockWithoutGil lock(t);
+                t.insertVertices(vertices);
+            },
             py::arg("vertices"))
         .def(
             "insert_vertices",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format != py::format_descriptor<coord_t>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a double array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "coordinates (2 per vertex)!");
-                }
-                // create from buffer
-                struct XY
-                {
-                    coord_t xy[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const XY* const ptr = static_cast<XY*>(info.ptr);
+                const auto [ptr, n_vert] =
+                    buffer_pairs<coord_t>(info, "double", "vertex");
+                LockWithoutGil lock(t);
                 t.insertVertices(
                     ptr,
                     ptr + n_vert,
-                    [](const XY& v) { return v.xy[0]; },
-                    [](const XY& v) { return v.xy[1]; });
+                    [](const BufferPair<coord_t>& v) { return v.v[0]; },
+                    [](const BufferPair<coord_t>& v) { return v.v[1]; });
             },
             py::arg("vertex_buffer"))
         .def(
             "insert_edges",
-            static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
-                &Triangulation::insertEdges),
+            [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
+                LockWithoutGil lock(t);
+                t.insertEdges(edges);
+            },
             py::arg("edges"))
         .def(
             "insert_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format !=
-                    py::format_descriptor<CDT::VertInd>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a CDT::VertInd array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "CDT::VertInd (2 per edge)!");
-                }
-                // create from buffer
-                struct EdgeData
-                {
-                    CDT::VertInd vv[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
+                const auto [ptr, n_edges] =
+                    buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
+                LockWithoutGil lock(t);
                 t.insertEdges(
                     ptr,
-                    ptr + n_vert,
-                    [](const EdgeData& e) { return e.vv[0]; },
-                    [](const EdgeData& e) { return e.vv[1]; });
+                    ptr + n_edges,
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
             },
             py::arg("edge_buffer"))
         .def(
             "conform_to_edges",
-            static_cast<void (Triangulation::*)(const std::vector<CDT::Edge>&)>(
-                &Triangulation::conformToEdges),
+            [](Triangulation& t, const std::vector<CDT::Edge>& edges) {
+                LockWithoutGil lock(t);
+                t.conformToEdges(edges);
+            },
             py::arg("edges"))
         .def(
             "conform_to_edges",
             [](Triangulation& t, py::buffer b) {
                 const py::buffer_info info = b.request();
-                // sanity checks
-                if (info.format !=
-                    py::format_descriptor<CDT::VertInd>::format())
-                {
-                    throw std::runtime_error(
-                        "Incompatible format: expected a CDT::VertInd array!");
-                }
-                if (info.ndim != 1 && info.ndim != 2)
-                {
-                    throw std::runtime_error("Incompatible buffer dimension!");
-                }
-                if (info.size % 2 != 0)
-                {
-                    throw std::runtime_error("Buffer must hold even number of "
-                                             "CDT::VertInd (2 per edge)!");
-                }
-                // create from buffer
-                struct EdgeData
-                {
-                    CDT::VertInd vv[2];
-                };
-                const std::size_t n_vert = info.size / 2;
-                const EdgeData* const ptr = static_cast<EdgeData*>(info.ptr);
+                const auto [ptr, n_edges] =
+                    buffer_pairs<CDT::VertInd>(info, "CDT::VertInd", "edge");
+                LockWithoutGil lock(t);
                 t.conformToEdges(
                     ptr,
-                    ptr + n_vert,
-                    [](const EdgeData& e) { return e.vv[0]; },
-                    [](const EdgeData& e) { return e.vv[1]; });
+                    ptr + n_edges,
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[0]; },
+                    [](const BufferPair<CDT::VertInd>& e) { return e.v[1]; });
             },
             py::arg("edge_buffer"))
-        .def("erase_super_triangle", &Triangulation::eraseSuperTriangle)
-        .def("erase_outer_triangles", &Triangulation::eraseOuterTriangles)
+        .def(
+            "erase_super_triangle",
+            [](Triangulation& t) {
+                LockWithoutGil lock(t);
+                t.eraseSuperTriangle();
+            })
+        .def(
+            "erase_outer_triangles",
+            [](Triangulation& t) {
+                LockWithoutGil lock(t);
+                t.eraseOuterTriangles();
+            })
         .def(
             "erase_outer_triangles_and_holes",
-            &Triangulation::eraseOuterTrianglesAndHoles)
-        .def("is_finalized", &Triangulation::isFinalized)
+            [](Triangulation& t) {
+                LockWithoutGil lock(t);
+                t.eraseOuterTrianglesAndHoles();
+            })
+        .def(
+            "is_finalized",
+            [](Triangulation& t) {
+                LockWithGil lock(t);
+                return t.isFinalized();
+            })
         .def(
             "calculate_triangle_depths",
-            &Triangulation::calculateTriangleDepths)
+            [](Triangulation& t) {
+                LockWithoutGil lock(t);
+                return t.calculateTriangleDepths();
+            })
         .def(
             "remove_triangles",
-            static_cast<void (Triangulation::*)(const CDT::TriIndUSet&)>(
-                &Triangulation::removeTriangles),
+            [](Triangulation& t, const CDT::TriIndUSet& triangle_indices) {
+                LockWithoutGil lock(t);
+                t.removeTriangles(triangle_indices);
+            },
             py::arg("triangle_indices"));
 
     m.def(
         "verify_topology",
-        &CDT::verifyTopology<coord_t, NearPointLocator_t>,
+        [](Triangulation& t) {
+            LockWithoutGil lock(t);
+            return CDT::verifyTopology(t);
+        },
         py::arg("triangulation"));
 }
