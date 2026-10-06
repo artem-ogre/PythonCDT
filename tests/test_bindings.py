@@ -1,17 +1,16 @@
-#!/usr/bin/env python3
-
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-""" Tests for CDT Python bindings """
+"""Tests for CDT Python bindings"""
+
+import hashlib
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import numpy as np
 import pytest
-import tempfile
-import hashlib
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 import pythoncdt as cdt
 
@@ -35,7 +34,7 @@ def test_V2d() -> None:
     assert p.x == 42 and p.y == 42, "Error in constructing 2D vector with int"
     p = cdt.V2d(42.0, 42.0)
     assert p.x == 42 and p.y == 42, "Error in constructing 2D vector with float"
-    p = cdt.V2d(np.array([42., 42.]))
+    p = cdt.V2d(np.array([42.0, 42.0]))
     assert p.x == 42 and p.y == 42, "Error in constructing 2D vector with buffer protocol"
 
     assert cdt.V2d(1.23, 2).__repr__() == "V2d(1.23, 2)", "Wrong __repr__ output for V2d"
@@ -141,31 +140,33 @@ def test_triangle_geometry() -> None:
 
 def save_triangulation_as_off(t: cdt.Triangulation, off_file) -> None:
     with open(off_file, "w") as f:
-        f.write(f"OFF\n")
+        f.write("OFF\n")
         f.write(f"{t.vertices_count()} {t.triangles_count()} 0\n")
-        for v in t.vertices_iter():
-            f.write(f"{v.x} {v.y} 0\n")
+        f.writelines(f"{v.x} {v.y} 0\n" for v in t.vertices_iter())
         for tri in t.triangles_iter():
             vv = tri.vertices
             f.write(f"3 {int(vv[0])} {int(vv[1])} {int(vv[2])}\n")
 
 
 def read_input_file(input_file):
-    with open(input_file, "r") as f:
+    with open(input_file) as f:
         n_verts, n_edges = (int(s) for s in f.readline().split())
         verts = [cdt.V2d(*(float(s) for s in f.readline().split())) for _ in range(n_verts)]
         edges = [cdt.Edge(*(int(s) for s in f.readline().split())) for _ in range(n_edges)]
         return verts, edges
 
+
 def md5_checksum(file_path):
-    with open(file_path, 'r') as f:
-        return hashlib.md5(f.read().encode('utf-8')).hexdigest()
+    with open(file_path) as f:
+        return hashlib.md5(f.read().encode("utf-8")).hexdigest()
+
 
 def triangulation_md5_checksum(t: cdt.Triangulation):
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
         return md5_checksum(off_file)
+
 
 def test_triangulate_input_file() -> None:
     vv, ee = read_input_file(DATA_DIR / "Constrained Sweden.txt")
@@ -176,7 +177,7 @@ def test_triangulate_input_file() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         off_file = f"{tmp_dir}/cdt.off"
         save_triangulation_as_off(t, off_file)
-        assert md5_checksum(off_file) == 'db59c00d9dad866781cd96779e5262b7', "Wrong OFF file contents"
+        assert md5_checksum(off_file) == "db59c00d9dad866781cd96779e5262b7", "Wrong OFF file contents"
 
 
 def test_conform_to_edges() -> None:
@@ -185,7 +186,7 @@ def test_conform_to_edges() -> None:
     t.insert_vertices(vv)
     t.conform_to_edges(ee)
     t.erase_outer_triangles_and_holes()
-    assert triangulation_md5_checksum(t) == 'b64cae39c91a55dd4e23a146eb7df0d3', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == "b64cae39c91a55dd4e23a146eb7df0d3", "Wrong OFF file contents"
 
 
 def triangle_smallest_angles(t: cdt.Triangulation):
@@ -209,12 +210,17 @@ def triangulation_with_sharp_input_corner() -> cdt.Triangulation:
     return t
 
 
-@pytest.mark.parametrize("criterion, threshold, is_criterion_fulfilled", [
-    (cdt.RefinementCriterion.SMALLEST_ANGLE, cdt.deg_to_rad(20.0),
-     lambda t, threshold: min(triangle_smallest_angles(t)) >= threshold),
-    (cdt.RefinementCriterion.LARGEST_AREA, 2.0,
-     lambda t, threshold: max(triangle_areas(t)) <= threshold),
-])
+@pytest.mark.parametrize(
+    "criterion, threshold, is_criterion_fulfilled",
+    [
+        (
+            cdt.RefinementCriterion.SMALLEST_ANGLE,
+            cdt.deg_to_rad(20.0),
+            lambda t, threshold: min(triangle_smallest_angles(t)) >= threshold,
+        ),
+        (cdt.RefinementCriterion.LARGEST_AREA, 2.0, lambda t, threshold: max(triangle_areas(t)) <= threshold),
+    ],
+)
 def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_fulfilled) -> None:
     vv, ee = read_input_file(DATA_DIR / "Capital A.txt")
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -224,8 +230,14 @@ def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_
     to_erase = t.collect_outer_triangles_and_holes()
     assert to_erase == t.collect_outer_triangles_and_holes(), "Collecting triangles must not change the triangulation"
     unrefined = t.refine_triangles(1000, criterion, threshold, to_erase)
-    gave_up = [unrefined.short_edge_triangles, unrefined.circumcenter_outside, unrefined.circumcenter_on_vertex,
-               unrefined.sharp_fixed_corner, unrefined.short_edges, unrefined.split_vertex_invalid]
+    gave_up = [
+        unrefined.short_edge_triangles,
+        unrefined.circumcenter_outside,
+        unrefined.circumcenter_on_vertex,
+        unrefined.sharp_fixed_corner,
+        unrefined.short_edges,
+        unrefined.split_vertex_invalid,
+    ]
     assert not any(gave_up), f"Refinement gave up: {unrefined}"
     assert t.find_encroached_fixed_edges() == [], "Triangulation has encroached fixed edges"
 
@@ -255,8 +267,9 @@ def test_refine_triangles_reports_sharp_input_corner() -> None:
     to_erase = t.collect_outer_triangles()
     unrefined = t.refine_triangles(1000, cdt.RefinementCriterion.SMALLEST_ANGLE, threshold, to_erase)
     assert unrefined.sharp_fixed_corner > 0, f"Sharp input corner was not reported: {unrefined}"
-    assert len(t.find_unrefined_triangles(cdt.RefinementCriterion.SMALLEST_ANGLE, threshold)) == 1, \
+    assert len(t.find_unrefined_triangles(cdt.RefinementCriterion.SMALLEST_ANGLE, threshold)) == 1, (
         "Triangle left sharp by the input must be found"
+    )
 
     t.finalize_triangulation(to_erase)
     assert t.triangles_count() == 1, "Only the sharp input triangle must be left"
@@ -272,28 +285,43 @@ def test_refining_and_collecting_fail_on_finalized_triangulation() -> None:
     t = triangulation_with_bad_triangles()
     t.erase_super_triangle()
     assert t.is_finalized(), "Triangulation must be finalized"
-    for call in [lambda: t.refine_triangles(10), t.find_encroached_fixed_edges, t.collect_super_triangle,
-                 t.collect_outer_triangles, t.collect_outer_triangles_and_holes,
-                 lambda: t.finalize_triangulation(set())]:
+    for call in [
+        lambda: t.refine_triangles(10),
+        t.find_encroached_fixed_edges,
+        t.collect_super_triangle,
+        t.collect_outer_triangles,
+        t.collect_outer_triangles_and_holes,
+        lambda: t.finalize_triangulation(set()),
+    ]:
         with pytest.raises(RuntimeError):
             call()
 
 
-@pytest.mark.parametrize("vv", [[cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)],
-                                np.array([[-1, 0], [0, 0.5], [1, 0], [0, -0.5]], dtype=np.float64),
-                                np.array([-1, 0, 0, 0.5, 1, 0, 0, -0.5], dtype=np.float64)])
+@pytest.mark.parametrize(
+    "vv",
+    [
+        [cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)],
+        np.array([[-1, 0], [0, 0.5], [1, 0], [0, -0.5]], dtype=np.float64),
+        np.array([-1, 0, 0, 0.5, 1, 0, 0, -0.5], dtype=np.float64),
+    ],
+)
 def test_insert_vertices(vv) -> None:
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(vv)
     assert len(t.vertices) == 7, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 9, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 0, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == 'db9176f4429942862a7a73155fb55322', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == "db9176f4429942862a7a73155fb55322", "Wrong OFF file contents"
 
 
-@pytest.mark.parametrize("ee", [[cdt.Edge(0, 1), cdt.Edge(2, 3), cdt.Edge(3, 4), cdt.Edge(5, 6)],
-                                np.array([[0, 1], [2, 3], [3, 4], [5, 6]], dtype=np.uintc),
-                                np.array([0, 1, 2, 3, 3, 4, 5, 6], dtype=np.uintc)])
+@pytest.mark.parametrize(
+    "ee",
+    [
+        [cdt.Edge(0, 1), cdt.Edge(2, 3), cdt.Edge(3, 4), cdt.Edge(5, 6)],
+        np.array([[0, 1], [2, 3], [3, 4], [5, 6]], dtype=np.uintc),
+        np.array([0, 1, 2, 3, 3, 4, 5, 6], dtype=np.uintc),
+    ],
+)
 def test_insert_conform_edges(ee) -> None:
     # insert edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -302,7 +330,7 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 10, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 15, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 4, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == '639c7a1492b2adb8f25464ec81ff6a00', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == "639c7a1492b2adb8f25464ec81ff6a00", "Wrong OFF file contents"
 
     # conform to edges
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
@@ -311,14 +339,15 @@ def test_insert_conform_edges(ee) -> None:
     assert len(t.vertices) == 12, "Wrong vertex count in triangulation"
     assert len(t.triangles) == 19, "Wrong triangle count in triangulation"
     assert len(t.fixed_edges) == 6, "Wrong fixed edge count in triangulation"
-    assert triangulation_md5_checksum(t) == '9c87b435e247c1658ec0f04af3340dc7', "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == "9c87b435e247c1658ec0f04af3340dc7", "Wrong OFF file contents"
 
 
 @pytest.mark.parametrize("copy", [True, False])
 def test_arrays(copy) -> None:
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
-    assert t.vertices_array(copy=copy).shape == t.triangles_array(copy=copy).shape == (0,), \
+    assert t.vertices_array(copy=copy).shape == t.triangles_array(copy=copy).shape == (0,), (
         "Empty triangulation must give empty arrays"
+    )
 
     t.insert_vertices([cdt.V2d(-1, 0), cdt.V2d(0, 0.5), cdt.V2d(1, 0), cdt.V2d(0, -0.5)])
     vertices = t.vertices_array(copy=copy)
@@ -329,7 +358,7 @@ def test_arrays(copy) -> None:
 
     expected = [vertices.copy(), triangles.copy()]
     del t
-    for arr, before in zip([vertices, triangles], expected):
+    for arr, before in zip([vertices, triangles], expected, strict=True):
         assert arr.flags.owndata == arr.flags.writeable == copy, "Copy must be owned and writeable, view neither"
         assert np.array_equal(arr, before), "Array must stay valid after the triangulation is deleted"
 

@@ -23,6 +23,8 @@ pip install . --group test  # needs pip 25.1+
 pytest
 ```
 
+Before committing, install the [pre-commit](https://pre-commit.com) hooks with `pre-commit install`: CI runs the same checks.
+
 ## Usage examples
 
 ### Constrained triangulation
@@ -39,9 +41,9 @@ t.insert_vertices(vertices)
 t.insert_edges(edges)
 t.erase_outer_triangles_and_holes()
 
-vv = t.vertices_array()   # numpy array with fields 'x' and 'y'
+vv = t.vertices_array()  # numpy array with fields 'x' and 'y'
 tt = t.triangles_array()  # numpy array with fields 'vertices' and 'neighbors'
-tt["vertices"]            # (T, 3) vertex indices into vv
+tt["vertices"]  # (T, 3) vertex indices into vv
 ```
 
 #### Notes

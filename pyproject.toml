@@ -62,6 +62,10 @@ strict = true
 filterwarnings = ["error"]
 testpaths = ["tests"]
 
+[tool.ruff]
+line-length = 120
+extend-exclude = ["CDT"]
+
 [tool.cibuildwheel]
 test-groups = ["test"]
 test-command = "pytest {project}/tests"

@@ -5,4 +5,4 @@
 """Python bindings for CDT: constrained Delaunay triangulation"""
 
 from ._core import *
-from ._core import __version__
+from ._core import __version__ as __version__
