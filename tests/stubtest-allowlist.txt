@@ -1,0 +1,12 @@
+# pybind11 classes have pybind11's own metaclass
+pythoncdt._core.Edge
+pythoncdt._core.IntersectingConstraintEdges
+pythoncdt._core.RefinementCriterion
+pythoncdt._core.Triangle
+pythoncdt._core.Triangulation
+pythoncdt._core.Unrefined
+pythoncdt._core.V2d
+pythoncdt._core.VertexInsertionOrder
+# no constructor is bound: instances only come from a triangulation
+pythoncdt._core.Triangle.__init__
+pythoncdt._core.Unrefined.__init__

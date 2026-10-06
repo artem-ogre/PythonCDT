@@ -11,8 +11,11 @@ import pytest
 import tempfile
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
-import PythonCDT as cdt
+import pythoncdt as cdt
+
+DATA_DIR = Path(__file__).parents[1] / "CDT" / "visualizer" / "data"
 
 
 def test_constants() -> None:
@@ -165,7 +168,7 @@ def triangulation_md5_checksum(t: cdt.Triangulation):
         return md5_checksum(off_file)
 
 def test_triangulate_input_file() -> None:
-    vv, ee = read_input_file("CDT/visualizer/data/Constrained Sweden.txt")
+    vv, ee = read_input_file(DATA_DIR / "Constrained Sweden.txt")
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     t.insert_vertices(vv)
     t.insert_edges(ee)
@@ -177,7 +180,7 @@ def test_triangulate_input_file() -> None:
 
 
 def test_conform_to_edges() -> None:
-    vv, ee = read_input_file("CDT/visualizer/data/ditch.txt")
+    vv, ee = read_input_file(DATA_DIR / "ditch.txt")
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
     t.insert_vertices(vv)
     t.conform_to_edges(ee)
@@ -213,7 +216,7 @@ def triangulation_with_sharp_input_corner() -> cdt.Triangulation:
      lambda t, threshold: max(triangle_areas(t)) <= threshold),
 ])
 def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_fulfilled) -> None:
-    vv, ee = read_input_file("CDT/visualizer/data/Capital A.txt")
+    vv, ee = read_input_file(DATA_DIR / "Capital A.txt")
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(vv)
     t.insert_edges(ee)

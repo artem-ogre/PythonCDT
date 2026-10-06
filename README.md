@@ -3,17 +3,24 @@
 Python bindings for [CDT: C++ library for constrained Delaunay triangulation](https://github.com/artem-ogre/CDT) implemented with [pybind11](https://github.com/pybind/pybind11)
 
 ***If PythonCDT helped you please consider adding a star on [GitHub](https://github.com/artem-ogre/PythonCDT). This means a lot to the authors*** 🤩
-## Building
 
-### Pre-conditions
-- Clone with submodules: `git clone --recurse-submodules https://github.com/artem-ogre/PythonCDT.git`
-- Make sure packages from requirements.txt are available.
+## Installation
 
 ```bash
-# build the wheel and install the package with pip
-pip3 install .
-# run tests
-pytest ./cdt_bindings_test.py
+pip install pythoncdt
+```
+
+Wheels are published for Linux, macOS and Windows.
+
+## Building from source
+
+Building needs a C++17 compiler; pip fetches pybind11, and CMake if it is missing.
+
+```bash
+git clone --recurse-submodules https://github.com/artem-ogre/PythonCDT.git
+cd PythonCDT
+pip install . --group test  # needs pip 25.1+
+pytest
 ```
 
 ## Usage examples
@@ -22,7 +29,7 @@ pytest ./cdt_bindings_test.py
 
 ```python
 import numpy as np
-import PythonCDT as cdt
+import pythoncdt as cdt
 
 vertices = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]])
 edges = np.array([[0, 1], [1, 2], [2, 3], [3, 0]], dtype=np.uintc)

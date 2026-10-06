@@ -4,7 +4,7 @@ import timeit
 
 import numpy as np
 
-import PythonCDT as cdt
+import pythoncdt as cdt
 
 t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
 t.insert_vertices(np.random.default_rng(0).random((200_000, 2)))

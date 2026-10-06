@@ -170,14 +170,14 @@ std::string TriInd2str(CDT::TriInd it)
 
 } // namespace
 
-PYBIND11_MODULE(PythonCDT, m, py::mod_gil_not_used())
+PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
 {
     // clang-format off
     m.doc() = R"pbdoc(
-        PythonCDT module: python bindings for CDT:
+        pythoncdt module: python bindings for CDT:
         Constrained Delaunay Triangulation
         -----------------------
-        .. currentmodule:: PythonCDT
+        .. currentmodule:: pythoncdt
         .. autosummary::
            :toctree: _generate
     )pbdoc";
