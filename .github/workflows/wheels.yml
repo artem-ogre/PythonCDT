@@ -49,7 +49,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && github.repository == 'artem-ogre/PythonCDT'  # a fork's release builds the wheels but never publishes
     needs: [sdist, wheels]
     runs-on: ubuntu-latest
     # PyPI trusted publishing: no token is stored, PyPI trusts this workflow in this repository.
