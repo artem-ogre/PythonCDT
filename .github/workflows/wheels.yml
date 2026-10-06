@@ -46,7 +46,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && github.repository == 'artem-ogre/PythonCDT'
     needs: [sdist, wheels]
     runs-on: ubuntu-latest
     environment:
