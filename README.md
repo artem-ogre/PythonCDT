@@ -97,3 +97,5 @@ Iterators (`*_iter()`) and `copy=False` views are not protected: don't use them 
 ## Contributors
 - [SioulisChris](https://github.com/SioulisChris): fixing the tests on Windows
 - [sccolbert](https://github.com/sccolbert): reading the triangulation back as numpy arrays, releasing the GIL
+- [mdealencar](https://github.com/mdealencar): packaging for PyPI
+- [aidannewsome](https://github.com/aidannewsome): free-threading support, building wheels for PyPI
