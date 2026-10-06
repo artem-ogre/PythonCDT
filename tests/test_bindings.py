@@ -37,6 +37,10 @@ def test_V2d() -> None:
     assert p.x == 42 and p.y == 42, "Error in constructing 2D vector with buffer protocol"
 
     assert repr(cdt.V2d(1.23, 2)) == "V2d(1.23, 2)", "Wrong __repr__ output for V2d"
+    assert np.asarray(cdt.V2d(1, 2)).tolist() == [1, 2], "Wrong V2d buffer"
+    for bad in [np.array([1.0]), np.zeros(4), np.arange(4.0).reshape(2, 2)[:, 0]]:
+        with pytest.raises(RuntimeError):
+            cdt.V2d(bad)
 
 
 def test_Edge() -> None:
@@ -49,6 +53,11 @@ def test_Edge() -> None:
     assert e.v1 == 1 and e.v2 == 2, "Constructed wrong edge"
 
     assert repr(cdt.Edge(1, 2)) == "Edge(1, 2)", "Wrong __repr__ output for Edge"
+    assert np.asarray(cdt.Edge(1, 2)).tolist() == [1, 2], "Wrong Edge buffer"
+    assert memoryview(cdt.Edge(1, 2)).readonly, "Edge buffer must be read-only"
+    for bad in [np.array([1], dtype=np.uintc), np.arange(4, dtype=np.uintc).reshape(2, 2)[:, 0]]:
+        with pytest.raises(RuntimeError):
+            cdt.Edge(bad)
 
     ee = [cdt.Edge(2, 3), cdt.Edge(0, 5), cdt.Edge(0, 1)]
     assert sorted(ee) == [cdt.Edge(0, 1), cdt.Edge(0, 5), cdt.Edge(2, 3)], "Edges are ordered wrong"
