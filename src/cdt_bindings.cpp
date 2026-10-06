@@ -16,9 +16,6 @@
 #include <sstream>
 #include <utility>
 
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
-
 namespace py = pybind11;
 
 using coord_t = double;
@@ -163,6 +160,21 @@ std::pair<const BufferPair<T>*, std::size_t> buffer_pairs(
     return {static_cast<const BufferPair<T>*>(info.ptr), info.size / 2};
 }
 
+// Reads a buffer holding a single pair
+template <typename T>
+BufferPair<T> buffer_pair(
+    const py::buffer& b,
+    const std::string& type_name,
+    const std::string& item_name)
+{
+    const py::buffer_info info = b.request();
+    const auto [ptr, n] = buffer_pairs<T>(info, type_name, item_name);
+    if (n != 1)
+        throw std::runtime_error(
+            "Buffer must hold one " + type_name + " pair!");
+    return *ptr;
+}
+
 std::string TriInd2str(CDT::TriInd it)
 {
     return it != CDT::noNeighbor ? std::to_string(it) : "-";
@@ -170,24 +182,20 @@ std::string TriInd2str(CDT::TriInd it)
 
 } // namespace
 
-PYBIND11_MODULE(PythonCDT, m, py::mod_gil_not_used())
+PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
 {
     // clang-format off
     m.doc() = R"pbdoc(
-        PythonCDT module: python bindings for CDT:
+        pythoncdt module: python bindings for CDT:
         Constrained Delaunay Triangulation
         -----------------------
-        .. currentmodule:: PythonCDT
+        .. currentmodule:: pythoncdt
         .. autosummary::
            :toctree: _generate
     )pbdoc";
     // clang-format on
 
-#ifdef VERSION_INFO
-        m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-        m.attr("__version__") = "dev";
-#endif
+    m.attr("__version__") = VERSION_INFO;
 
     m.attr("NO_NEIGHBOR") = py::int_(CDT::noNeighbor);
     m.attr("NO_VERTEX") = py::int_(CDT::noVertex);
@@ -231,14 +239,8 @@ PYBIND11_MODULE(PythonCDT, m, py::mod_gil_not_used())
     py::class_<V2d>(m, "V2d", py::buffer_protocol())
         .def(py::init<coord_t, coord_t>(), py::arg("x"), py::arg("y"))
         .def(py::init([](py::buffer b) {
-            py::buffer_info info = b.request();
-            if (info.format != py::format_descriptor<coord_t>::format())
-                throw std::runtime_error(
-                    "Incompatible format: expected a double array!");
-            if (info.ndim != 1)
-                throw std::runtime_error("Incompatible buffer dimension!");
-            const coord_t* const ptr = static_cast<coord_t*>(info.ptr);
-            return V2d{ptr[0], ptr[1]};
+            const auto p = buffer_pair<coord_t>(b, "double", "vertex");
+            return V2d{p.v[0], p.v[1]};
         }))
         .def_readwrite("x", &V2d::x)
         .def_readwrite("y", &V2d::y)
@@ -254,15 +256,7 @@ PYBIND11_MODULE(PythonCDT, m, py::mod_gil_not_used())
                 oss << "V2d(" << v.x << ", " << v.y << ")";
                 return oss.str();
             })
-        .def_buffer([](V2d& v) -> py::buffer_info {
-            return py::buffer_info(
-                &v,
-                sizeof(coord_t),
-                py::format_descriptor<coord_t>::format(),
-                1,
-                {2},
-                {sizeof(coord_t) * 2});
-        });
+        .def_buffer([](V2d& v) { return py::buffer_info(&v.x, 2); });
     PYBIND11_NUMPY_DTYPE(V2d, x, y);
 
     PYBIND11_NUMPY_DTYPE(CDT::Triangle, vertices, neighbors);
@@ -297,27 +291,13 @@ PYBIND11_MODULE(PythonCDT, m, py::mod_gil_not_used())
             py::arg("index_vert_a"),
             py::arg("index_vert_b"))
         .def(py::init([](py::buffer b) {
-            // Request a buffer descriptor from Python
-            py::buffer_info info = b.request();
-            // Some sanity checks ...
-            if (info.format != py::format_descriptor<CDT::VertInd>::format())
-                throw std::runtime_error(
-                    "Incompatible format: expected a CDT::VertInd array!");
-            if (info.ndim != 1)
-                throw std::runtime_error("Incompatible buffer dimension!");
-            // create from buffer
-            const CDT::VertInd* const ptr =
-                static_cast<CDT::VertInd*>(info.ptr);
-            return CDT::Edge(ptr[0], ptr[1]);
+            const auto p = buffer_pair<CDT::VertInd>(b, "CDT::VertInd", "edge");
+            return CDT::Edge(p.v[0], p.v[1]);
         }))
-        .def_buffer([](CDT::Edge& e) -> py::buffer_info {
+        // read-only: writing could break the v1 < v2 invariant
+        .def_buffer([](const CDT::Edge& e) {
             return py::buffer_info(
-                &e,
-                sizeof(CDT::VertInd),
-                py::format_descriptor<coord_t>::format(),
-                1,
-                {2},
-                {sizeof(CDT::VertInd) * 2});
+                reinterpret_cast<const CDT::VertInd*>(&e), 2);
         })
         .def_property_readonly("v1", &CDT::Edge::v1)
         .def_property_readonly("v2", &CDT::Edge::v2)

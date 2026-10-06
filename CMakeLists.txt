@@ -1,29 +1,13 @@
-cmake_minimum_required(VERSION 3.13.0)
+cmake_minimum_required(VERSION 3.15...4.0)
+project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+find_package(pybind11 CONFIG REQUIRED)
+add_subdirectory(CDT/CDT)
 
-project(
-    PythonCDT
-    VERSION 2.0.0
-    DESCRIPTION "Python bindings for CDT: constrained Delaunay triangulation"
-    LANGUAGES CXX
-)
+pybind11_add_module(_core src/cdt_bindings.cpp)
+target_compile_features(_core PRIVATE cxx_std_17)
+target_compile_definitions(_core PRIVATE VERSION_INFO="${SKBUILD_PROJECT_VERSION_FULL}")
+target_link_libraries(_core PRIVATE CDT::CDT)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-add_subdirectory(CDT/CDT CDT)
-add_subdirectory(pybind11)
-pybind11_add_module(PythonCDT cdt_bindings.cpp)
-target_include_directories(
-        PythonCDT PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
-)
-target_link_libraries(PythonCDT PRIVATE CDT::CDT)
-# Exposed to Python as PythonCDT.__version__. setup.py passes the wheel
-# version; fall back to the project version for plain CMake builds.
-if(NOT DEFINED VERSION_INFO)
-    set(VERSION_INFO ${PROJECT_VERSION})
-endif()
-target_compile_definitions(PythonCDT PRIVATE VERSION_INFO=${VERSION_INFO})
-# Use rasterizer as pre-compiled header for faster test-only re-compiles
-#target_precompile_headers(PythonCDT PRIVATE include/rasterizer.h)
+# Installed as a component, so that CDT's own install rules stay out of the wheel
+install(TARGETS _core DESTINATION pythoncdt COMPONENT python)

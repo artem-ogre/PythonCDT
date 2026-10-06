@@ -1,25 +1,75 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel",
-    "ninja",
-    "cmake>=3.12",
+requires = ["scikit-build-core>=0.11", "pybind11>=3.0.4", "setuptools-scm>=8"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pythoncdt"
+dynamic = ["version"]
+description = "Python bindings for CDT: constrained Delaunay triangulation"
+readme = "README.md"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Artem Amirkhanov" }]
+requires-python = ">=3.10"
+dependencies = ["numpy"]
+keywords = [
+    "cdt",
+    "computational-geometry",
+    "conforming",
+    "constrained",
+    "constrained-delaunay-triangulation",
+    "delaunay",
+    "delaunay-triangulation",
+    "fast",
+    "refinement",
+    "robust",
+    "triangle",
+    "triangulation",
 ]
-build-backend = "setuptools.build_meta"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Free Threading :: 3 - Stable",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Multimedia :: Graphics",
+    "Typing :: Typed",
+]
 
-[tool.isort]
-profile = "black"
+[project.urls]
+Source = "https://github.com/artem-ogre/PythonCDT"
+Issues = "https://github.com/artem-ogre/PythonCDT/issues"
+CDT = "https://github.com/artem-ogre/CDT"
 
-[tool.pytest.ini_options]
-minversion = "6.0"
-addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
-xfail_strict = true
+[dependency-groups]
+test = ["pytest>=9", "pytest-run-parallel"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+install.components = ["python"]
+sdist.exclude = ["CDT/docs", "CDT/CDT/tests"]
+
+[tool.pytest]
+addopts = ["-ra"]
+strict = true
 filterwarnings = ["error"]
-testpaths = ["cdt_bindings_test.py"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["CDT"]
 
 [tool.cibuildwheel]
-test-command = "pytest {project}/cdt_bindings_test.py"
-test-extras = ["test"]
-test-skip = ["*universal2:arm64"]
-# Setuptools bug causes collision between pypy and cpython artifacts
-before-build = "rm -rf {project}/build"
+test-groups = ["test"]
+test-command = "pytest {project}/tests"
+
+[tool.cibuildwheel.windows]
+# 32-bit is skipped: pybind11's structured dtypes crash it on free-threaded Python (pybind/pybind11#6196)
+archs = ["AMD64"]

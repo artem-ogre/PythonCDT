@@ -1,0 +1,15 @@
+name-template: $RESOLVED_VERSION
+tag-template: $RESOLVED_VERSION
+# The pull request labels choose the next version; unlabeled ones count as patch
+categories:
+  - type: version-resolver
+    semver-increment: major
+    when:
+      label: major
+  - type: version-resolver
+    semver-increment: minor
+    when:
+      label: minor
+  - type: version-resolver
+template: |
+  $CHANGES

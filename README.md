@@ -3,18 +3,27 @@
 Python bindings for [CDT: C++ library for constrained Delaunay triangulation](https://github.com/artem-ogre/CDT) implemented with [pybind11](https://github.com/pybind/pybind11)
 
 ***If PythonCDT helped you please consider adding a star on [GitHub](https://github.com/artem-ogre/PythonCDT). This means a lot to the authors*** 🤩
-## Building
 
-### Pre-conditions
-- Clone with submodules: `git clone --recurse-submodules https://github.com/artem-ogre/PythonCDT.git`
-- Make sure packages from requirements.txt are available.
+## Installation
 
 ```bash
-# build the wheel and install the package with pip
-pip3 install .
-# run tests
-pytest ./cdt_bindings_test.py
+pip install pythoncdt
 ```
+
+Wheels are published for Linux, macOS and Windows.
+
+## Building from source
+
+Building needs a C++17 compiler; pip fetches pybind11, and CMake if it is missing.
+
+```bash
+git clone --recurse-submodules https://github.com/artem-ogre/PythonCDT.git
+cd PythonCDT
+pip install . --group test  # needs pip 25.1+
+pytest
+```
+
+Before committing, install the [pre-commit](https://pre-commit.com) hooks with `pre-commit install`: CI runs the same checks.
 
 ## Usage examples
 
@@ -22,7 +31,7 @@ pytest ./cdt_bindings_test.py
 
 ```python
 import numpy as np
-import PythonCDT as cdt
+import pythoncdt as cdt
 
 vertices = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]])
 edges = np.array([[0, 1], [1, 2], [2, 3], [3, 0]], dtype=np.uintc)
@@ -32,9 +41,9 @@ t.insert_vertices(vertices)
 t.insert_edges(edges)
 t.erase_outer_triangles_and_holes()
 
-vv = t.vertices_array()   # numpy array with fields 'x' and 'y'
+vv = t.vertices_array()  # numpy array with fields 'x' and 'y'
 tt = t.triangles_array()  # numpy array with fields 'vertices' and 'neighbors'
-tt["vertices"]            # (T, 3) vertex indices into vv
+tt["vertices"]  # (T, 3) vertex indices into vv
 ```
 
 #### Notes
@@ -88,3 +97,5 @@ Iterators (`*_iter()`) and `copy=False` views are not protected: don't use them 
 ## Contributors
 - [SioulisChris](https://github.com/SioulisChris): fixing the tests on Windows
 - [sccolbert](https://github.com/sccolbert): reading the triangulation back as numpy arrays, releasing the GIL
+- [mdealencar](https://github.com/mdealencar): packaging for PyPI
+- [aidannewsome](https://github.com/aidannewsome): free-threading support, building wheels for PyPI

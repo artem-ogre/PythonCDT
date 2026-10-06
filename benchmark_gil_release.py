@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
-import PythonCDT as cdt
+import pythoncdt as cdt
 
 N_THREADS = min(8, os.cpu_count())
 N_VERTICES = 200_000
