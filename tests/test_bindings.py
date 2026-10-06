@@ -5,7 +5,6 @@
 """Tests for CDT Python bindings"""
 
 import hashlib
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -25,7 +24,7 @@ def test_constants() -> None:
 
 def test_version() -> None:
     """Test that the version is passed in from the build system"""
-    assert cdt.__version__ != "dev", "Version was not passed in from the build system"
+    assert cdt.__version__, "Version was not passed in from the build system"
 
 
 def test_V2d() -> None:
@@ -37,7 +36,7 @@ def test_V2d() -> None:
     p = cdt.V2d(np.array([42.0, 42.0]))
     assert p.x == 42 and p.y == 42, "Error in constructing 2D vector with buffer protocol"
 
-    assert cdt.V2d(1.23, 2).__repr__() == "V2d(1.23, 2)", "Wrong __repr__ output for V2d"
+    assert repr(cdt.V2d(1.23, 2)) == "V2d(1.23, 2)", "Wrong __repr__ output for V2d"
 
 
 def test_Edge() -> None:
@@ -49,7 +48,7 @@ def test_Edge() -> None:
     e = cdt.Edge(np.array([2, 1], dtype=np.uintc))
     assert e.v1 == 1 and e.v2 == 2, "Constructed wrong edge"
 
-    assert cdt.Edge(1, 2).__repr__() == "Edge(1, 2)", "Wrong __repr__ output for Edge"
+    assert repr(cdt.Edge(1, 2)) == "Edge(1, 2)", "Wrong __repr__ output for Edge"
 
     ee = [cdt.Edge(2, 3), cdt.Edge(0, 5), cdt.Edge(0, 1)]
     assert sorted(ee) == [cdt.Edge(0, 1), cdt.Edge(0, 5), cdt.Edge(2, 3)], "Edges are ordered wrong"
@@ -138,16 +137,6 @@ def test_triangle_geometry() -> None:
     assert cdt.circumcenter(a, b, c) == cdt.V2d(0.5, 0.5), "Wrong triangle circumcenter"
 
 
-def save_triangulation_as_off(t: cdt.Triangulation, off_file) -> None:
-    with open(off_file, "w") as f:
-        f.write("OFF\n")
-        f.write(f"{t.vertices_count()} {t.triangles_count()} 0\n")
-        f.writelines(f"{v.x} {v.y} 0\n" for v in t.vertices_iter())
-        for tri in t.triangles_iter():
-            vv = tri.vertices
-            f.write(f"3 {int(vv[0])} {int(vv[1])} {int(vv[2])}\n")
-
-
 def read_input_file(input_file):
     with open(input_file) as f:
         n_verts, n_edges = (int(s) for s in f.readline().split())
@@ -156,16 +145,11 @@ def read_input_file(input_file):
         return verts, edges
 
 
-def md5_checksum(file_path):
-    with open(file_path) as f:
-        return hashlib.md5(f.read().encode("utf-8")).hexdigest()
-
-
-def triangulation_md5_checksum(t: cdt.Triangulation):
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        return md5_checksum(off_file)
+def triangulation_md5_checksum(t: cdt.Triangulation) -> str:
+    lines = ["OFF", f"{t.vertices_count()} {t.triangles_count()} 0"]
+    lines += [f"{v.x} {v.y} 0" for v in t.vertices_iter()]
+    lines += ["3 {} {} {}".format(*tri.vertices) for tri in t.triangles_iter()]
+    return hashlib.md5("".join(f"{line}\n" for line in lines).encode()).hexdigest()
 
 
 def test_triangulate_input_file() -> None:
@@ -174,10 +158,7 @@ def test_triangulate_input_file() -> None:
     t.insert_vertices(vv)
     t.insert_edges(ee)
     t.erase_outer_triangles_and_holes()
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        off_file = f"{tmp_dir}/cdt.off"
-        save_triangulation_as_off(t, off_file)
-        assert md5_checksum(off_file) == "db59c00d9dad866781cd96779e5262b7", "Wrong OFF file contents"
+    assert triangulation_md5_checksum(t) == "db59c00d9dad866781cd96779e5262b7", "Wrong OFF file contents"
 
 
 def test_conform_to_edges() -> None:

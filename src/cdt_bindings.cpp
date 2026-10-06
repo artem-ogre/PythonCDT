@@ -16,9 +16,6 @@
 #include <sstream>
 #include <utility>
 
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
-
 namespace py = pybind11;
 
 using coord_t = double;
@@ -183,11 +180,7 @@ PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
     )pbdoc";
     // clang-format on
 
-#ifdef VERSION_INFO
-        m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-        m.attr("__version__") = "dev";
-#endif
+    m.attr("__version__") = VERSION_INFO;
 
     m.attr("NO_NEIGHBOR") = py::int_(CDT::noNeighbor);
     m.attr("NO_VERTEX") = py::int_(CDT::noVertex);
