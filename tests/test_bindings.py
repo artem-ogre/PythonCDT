@@ -27,6 +27,15 @@ def test_version() -> None:
     assert cdt.__version__, "Version was not passed in from the build system"
 
 
+def test_all_exports() -> None:
+    """Test that __all__ re-exports all public symbols from _core without dangling names"""
+    assert hasattr(cdt, "__all__")
+    for name in cdt.__all__:
+        assert hasattr(cdt, name), f"'{name}' in __all__ is missing from pythoncdt"
+    core_public = {n for n in dir(cdt._core) if not n.startswith("_")}
+    assert core_public.issubset(set(cdt.__all__)), f"Missing exports from _core: {core_public - set(cdt.__all__)}"
+
+
 def test_V2d() -> None:
     """Test 2D vector"""
     p = cdt.V2d(42, 42)
