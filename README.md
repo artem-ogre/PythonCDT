@@ -94,6 +94,10 @@ Iterators (`*_iter()`) and `copy=False` views are not protected: don't use them 
 ## License
 [Mozilla Public License, v. 2.0](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
 
+Bundled [CDT](https://github.com/artem-ogre/CDT) includes third-party code under other licenses:
+- `predicates.h`: BSD-3-Clause, see [LICENSE-predicates.txt](CDT/CDT/LICENSE-predicates.txt)
+- `portable_nth_element.hpp`: Apache-2.0 WITH LLVM-exception, see [LICENSE-LLVM.txt](CDT/CDT/LICENSE-LLVM.txt)
+
 ## Contributors
 - [SioulisChris](https://github.com/SioulisChris): fixing the tests on Windows
 - [sccolbert](https://github.com/sccolbert): reading the triangulation back as numpy arrays, releasing the GIL
