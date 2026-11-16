@@ -69,7 +69,7 @@ import numpy as np
 import pythoncdt as cdt
 
 vertices = np.array(
-    [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]]
+    [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]],
 )
 edges = np.array([[0, 1], [1, 2], [2, 3], [3, 0]], dtype=np.uintc)
 
@@ -140,7 +140,10 @@ t.insert_edges(edges)
 
 to_erase = t.collect_outer_triangles_and_holes()
 unrefined = t.refine_triangles(
-    1000, cdt.RefinementCriterion.SMALLEST_ANGLE, cdt.deg_to_rad(20.0), to_erase
+    1000,
+    cdt.RefinementCriterion.SMALLEST_ANGLE,
+    cdt.deg_to_rad(20.0),
+    to_erase,
 )
 t.finalize_triangulation(to_erase)
 ```
