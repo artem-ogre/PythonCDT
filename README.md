@@ -22,6 +22,21 @@ Python bindings for [CDT: C++ library for constrained Delaunay triangulation](ht
 - Exactly overlapping edges
 - Resolving intersecting edges by adding points at the intersections (with `IntersectingConstraintEdges.TRY_RESOLVE`)
 
+## Refinement
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement.png" alt="Constrained Delaunay triangulation refined by minimum angle and by maximum area" style='height: 100%; width: 100%; max-height: 300px; object-fit: contain'/></picture>
+
+`refine_triangles()` improves the shape of the triangles by inserting new points (Steiner points). It must be called
+before the triangulation is finalized: collect the triangles to remove first so that they are not refined, then
+remove them with `finalize_triangulation()` (the set is updated in place).
+
+**Limits of refinement**
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement-limits-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement-limits.png" alt="Sharp corner of the input that refinement can not improve" style='height: 100%; width: 100%; max-height: 200px; object-fit: contain'/></picture>
+
+Some places can not be refined: e.g., a sharp angle between two constraint edges comes from the input and can not be
+made any larger. `refine_triangles()` returns the counts of such refinements; `find_unrefined_triangles()` and
+`find_encroached_fixed_edges()` locate them in the resulting triangulation.
+
 ## Installation
 
 ```bash
@@ -83,6 +98,8 @@ t.erase_super_triangle()
 
 ### Conforming triangulation
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/A_conforming-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/A_conforming.png" alt="Example of a conforming triangulation" height="150"/></picture>
+
 ```python
 t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
 t.insert_vertices(vertices)
@@ -107,17 +124,6 @@ to_erase = t.collect_outer_triangles_and_holes()
 unrefined = t.refine_triangles(1000, cdt.RefinementCriterion.SMALLEST_ANGLE, cdt.deg_to_rad(20.0), to_erase)
 t.finalize_triangulation(to_erase)
 ```
-
-#### Notes
-
-- `refine_triangles()` improves the shape of the triangles by inserting new points (Steiner points). It must be called
-  before the triangulation is finalized: collect the triangles to remove first so that they are not refined, then
-  remove them with `finalize_triangulation()` (the set is updated in place).
-- Some places can not be refined: e.g., a sharp angle between two constraint edges comes from the input and can not be
-  made any larger. `refine_triangles()` returns the counts of such refinements; `find_unrefined_triangles()` and
-  `find_encroached_fixed_edges()` locate them in the resulting triangulation.
-
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement-limits-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/refinement-limits.png" alt="Sharp corner of the input that refinement can not improve" style='height: 100%; width: 100%; max-height: 200px; object-fit: contain'/></picture>
 
 ### Threads
 
