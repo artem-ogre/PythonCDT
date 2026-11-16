@@ -1,4 +1,4 @@
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/PythonCDT_logo-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/PythonCDT_logo.png" alt="PythonCDT Logo" width="400"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="./docs/images/PythonCDT_logo-dark.png"><img src="./docs/images/PythonCDT_logo.png" alt="PythonCDT Logo" width="400"/></picture>
 
 # PythonCDT
 
@@ -98,7 +98,7 @@ t.erase_super_triangle()
 
 ### Conforming triangulation
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/A_conforming-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/PythonCDT/master/docs/images/A_conforming.png" alt="Example of a conforming triangulation" height="150"/></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="./docs/images/A_conforming-dark.png"><img src="./docs/images/A_conforming.png" alt="Example of a conforming triangulation" height="150"/></picture>
 
 ```python
 t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
