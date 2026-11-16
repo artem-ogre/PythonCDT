@@ -38,7 +38,7 @@ jobs:
         with:
           submodules: true
           fetch-depth: 0
-      - uses: pypa/cibuildwheel@v4.3.0
+      - uses: pypa/cibuildwheel@v4.3.5
       - uses: actions/upload-artifact@v7
         with:
           name: dist-wheels-${{ matrix.os }}
