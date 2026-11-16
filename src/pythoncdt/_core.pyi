@@ -36,6 +36,11 @@ class RefinementCriterion(_Enum):
     LARGEST_AREA: ClassVar[RefinementCriterion]
     __members__: ClassVar[dict[str, RefinementCriterion]]
 
+class RefinementOrder(_Enum):
+    FIFO: ClassVar[RefinementOrder]
+    WORST_FIRST: ClassVar[RefinementOrder]
+    __members__: ClassVar[dict[str, RefinementOrder]]
+
 class Unrefined:
     @property
     def short_edge_triangles(self) -> int: ...
@@ -131,6 +136,7 @@ class Triangulation:
         refinement_threshold: float = ...,
         to_erase: set[int] | None = None,
         min_edge_length: float = ...,
+        refinement_order: RefinementOrder = ...,
     ) -> Unrefined: ...
     def find_unrefined_triangles(
         self,
