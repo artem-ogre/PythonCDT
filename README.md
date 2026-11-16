@@ -68,10 +68,16 @@ Before committing, install the [pre-commit](https://pre-commit.com) hooks with `
 import numpy as np
 import pythoncdt as cdt
 
-vertices = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]])
+vertices = np.array(
+    [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.4, 0.4]]
+)
 edges = np.array([[0, 1], [1, 2], [2, 3], [3, 0]], dtype=np.uintc)
 
-t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
+t = cdt.Triangulation(
+    cdt.VertexInsertionOrder.AUTO,
+    cdt.IntersectingConstraintEdges.TRY_RESOLVE,
+    0.0,
+)
 t.insert_vertices(vertices)
 t.insert_edges(edges)
 t.erase_outer_triangles_and_holes()
@@ -91,7 +97,11 @@ tt["vertices"]  # (T, 3) vertex indices into vv
 <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/LakeSuperior-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/LakeSuperior.png" alt="Example of a triangulated convex hull" height="150"/></picture>
 
 ```python
-t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
+t = cdt.Triangulation(
+    cdt.VertexInsertionOrder.AUTO,
+    cdt.IntersectingConstraintEdges.NOT_ALLOWED,
+    0.0,
+)
 t.insert_vertices(vertices)
 t.erase_super_triangle()
 ```
@@ -101,7 +111,11 @@ t.erase_super_triangle()
 <picture><source media="(prefers-color-scheme: dark)" srcset="./docs/images/A_conforming-dark.png"><img src="./docs/images/A_conforming.png" alt="Example of a conforming triangulation" height="150"/></picture>
 
 ```python
-t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
+t = cdt.Triangulation(
+    cdt.VertexInsertionOrder.AUTO,
+    cdt.IntersectingConstraintEdges.TRY_RESOLVE,
+    0.0,
+)
 t.insert_vertices(vertices)
 t.conform_to_edges(edges)
 t.erase_outer_triangles_and_holes()
@@ -116,12 +130,18 @@ t.erase_outer_triangles_and_holes()
 <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/A_refined-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/A_refined.png" alt="Example of a refined triangulation" height="150"/></picture>
 
 ```python
-t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.TRY_RESOLVE, 0.0)
+t = cdt.Triangulation(
+    cdt.VertexInsertionOrder.AUTO,
+    cdt.IntersectingConstraintEdges.TRY_RESOLVE,
+    0.0,
+)
 t.insert_vertices(vertices)
 t.insert_edges(edges)
 
 to_erase = t.collect_outer_triangles_and_holes()
-unrefined = t.refine_triangles(1000, cdt.RefinementCriterion.SMALLEST_ANGLE, cdt.deg_to_rad(20.0), to_erase)
+unrefined = t.refine_triangles(
+    1000, cdt.RefinementCriterion.SMALLEST_ANGLE, cdt.deg_to_rad(20.0), to_erase
+)
 t.finalize_triangulation(to_erase)
 ```
 
