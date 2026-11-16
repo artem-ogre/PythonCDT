@@ -2,6 +2,7 @@
 pythoncdt._core.Edge
 pythoncdt._core.IntersectingConstraintEdges
 pythoncdt._core.RefinementCriterion
+pythoncdt._core.RefinementOrder
 pythoncdt._core.Triangle
 pythoncdt._core.Triangulation
 pythoncdt._core.Unrefined

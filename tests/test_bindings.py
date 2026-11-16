@@ -211,7 +211,8 @@ def triangulation_with_sharp_input_corner() -> cdt.Triangulation:
         (cdt.RefinementCriterion.LARGEST_AREA, 2.0, lambda t, threshold: max(triangle_areas(t)) <= threshold),
     ],
 )
-def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_fulfilled) -> None:
+@pytest.mark.parametrize("order", [cdt.RefinementOrder.FIFO, cdt.RefinementOrder.WORST_FIRST])
+def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_fulfilled, order) -> None:
     vv, ee = read_input_file(DATA_DIR / "Capital A.txt")
     t = cdt.Triangulation(cdt.VertexInsertionOrder.AS_PROVIDED, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
     t.insert_vertices(vv)
@@ -219,7 +220,7 @@ def test_refine_triangles_fulfills_criterion(criterion, threshold, is_criterion_
 
     to_erase = t.collect_outer_triangles_and_holes()
     assert to_erase == t.collect_outer_triangles_and_holes(), "Collecting triangles must not change the triangulation"
-    unrefined = t.refine_triangles(1000, criterion, threshold, to_erase)
+    unrefined = t.refine_triangles(1000, criterion, threshold, to_erase, refinement_order=order)
     gave_up = [
         unrefined.short_edge_triangles,
         unrefined.circumcenter_outside,

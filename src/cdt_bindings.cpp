@@ -214,6 +214,10 @@ PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
         .value("SMALLEST_ANGLE", CDT::RefinementCriterion::SmallestAngle)
         .value("LARGEST_AREA", CDT::RefinementCriterion::LargestArea);
 
+    py::enum_<CDT::RefinementOrder::Enum>(m, "RefinementOrder")
+        .value("FIFO", CDT::RefinementOrder::FIFO)
+        .value("WORST_FIRST", CDT::RefinementOrder::WorstFirst);
+
     py::class_<CDT::Unrefined>(m, "Unrefined")
         .def_readonly(
             "short_edge_triangles", &CDT::Unrefined::shortEdgeTriangles)
@@ -440,7 +444,8 @@ PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
                CDT::RefinementCriterion::Enum refinement_criterion,
                coord_t refinement_threshold,
                py::object to_erase,
-               coord_t min_edge_length) {
+               coord_t min_edge_length,
+               CDT::RefinementOrder::Enum refinement_order) {
                 const bool has_to_erase = !to_erase.is_none();
                 if (has_to_erase && !py::isinstance<py::set>(to_erase))
                     throw py::type_error("to_erase must be a set or None!");
@@ -455,7 +460,8 @@ PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
                         refinement_criterion,
                         refinement_threshold,
                         has_to_erase ? &triangles_to_erase : NULL,
-                        min_edge_length);
+                        min_edge_length,
+                        refinement_order);
                 }
                 if (has_to_erase)
                 {
@@ -472,6 +478,7 @@ PYBIND11_MODULE(_core, m, py::mod_gil_not_used())
             py::arg("refinement_threshold") = CDT::degToRad(coord_t(20)),
             py::arg("to_erase") = py::none(),
             py::arg("min_edge_length") = coord_t(1e-6),
+            py::arg("refinement_order") = CDT::RefinementOrder::FIFO,
             "Triangles from `to_erase` are not refined; the triangles that "
             "replace them are added to it in place.")
         .def("find_encroached_fixed_edges", [](Triangulation& t) {
