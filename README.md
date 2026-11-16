@@ -97,7 +97,11 @@ tt["vertices"]  # (T, 3) vertex indices into vv
 <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/LakeSuperior-dark.png"><img src="https://raw.githubusercontent.com/artem-ogre/CDT/b355ebb/docs/images/LakeSuperior.png" alt="Example of a triangulated convex hull" height="150"/></picture>
 
 ```python
-t = cdt.Triangulation(cdt.VertexInsertionOrder.AUTO, cdt.IntersectingConstraintEdges.NOT_ALLOWED, 0.0)
+t = cdt.Triangulation(
+    cdt.VertexInsertionOrder.AUTO,
+    cdt.IntersectingConstraintEdges.NOT_ALLOWED,
+    0.0,
+)
 t.insert_vertices(vertices)
 t.erase_super_triangle()
 ```
