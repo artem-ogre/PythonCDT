@@ -54,7 +54,7 @@ test = ["pytest>=9", "pytest-run-parallel"]
 minimum-version = "build-system.requires"
 metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
 install.components = ["python"]
-sdist.exclude = ["CDT/docs", "CDT/CDT/tests"]
+sdist.exclude = ["docs", "CDT/docs", "CDT/CDT/tests"]
 
 [tool.pytest]
 addopts = ["-ra"]
